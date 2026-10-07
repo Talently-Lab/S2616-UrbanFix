@@ -24,7 +24,15 @@ Plataforma web tipo SPA que permite:
 ## Objetivo técnico
 Demostrar una SPA completa con autenticación, manejo de múltiples roles, consumo de API REST y despliegue en producción, como evidencia de perfil junior full-stack.
 
-## Equipo y roles
+## Documentación
+Información detallada del proyecto en Confluence: [CUF - Wiki del proyecto](https://stefaniasanudo.atlassian.net/wiki/spaces/CUF/overview)
+
+</details>
+
+<details>
+<summary>👥 Equipo y roles</summary>
+
+## Integrantes
 
 | ROL | INTEGRANTE/S | CONTACTO |
 |-----|--------------|----------|
@@ -34,9 +42,6 @@ Demostrar una SPA completa con autenticación, manejo de múltiples roles, consu
 | UX/UI | Carina | caricariluna@gmail.com |
 | TESTER QA | Lorena | lorenadelgado.ba@gmail.com |
 | PM | Stefanía | stefania.sanudo@gmail.com |
-
-## Documentación
-Información detallada del proyecto en Confluence: [CUF - Wiki del proyecto](https://stefaniasanudo.atlassian.net/wiki/spaces/CUF/overview)
 
 </details>
 
