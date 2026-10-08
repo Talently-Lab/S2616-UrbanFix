@@ -1,0 +1,98 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Rol {
+  CLIENTE
+  TECNICO
+  ADMIN
+}
+
+enum CategoriaServicio {
+  PLOMERIA
+  ELECTRICIDAD
+  GAS
+  CARPINTERIA
+  PINTURA
+  CERRAJERIA
+  ALBANILERIA
+  OTRO
+}
+
+enum EstadoSolicitud {
+  PENDIENTE   // Creada por el cliente, esperando asignación/respuesta
+  ACEPTADA    // Técnico aceptó el trabajo
+  RECHAZADA   // Técnico rechazó el trabajo
+  EN_PROCESO  // Trabajo en ejecución
+  FINALIZADA  // Trabajo completado
+  CANCELADA   // Cancelada por el cliente o admin
+}
+
+model Usuario {
+  id                 String    @id @default(uuid())
+  email              String    @unique
+  passwordHash       String
+  nombre             String
+  celular            String?   // opcional
+  rol                Rol       @default(CLIENTE)
+  fechaCreacion      DateTime  @default(now())
+  fechaActualizacion DateTime  @updatedAt
+
+  // Relaciones
+  solicitudesComoCliente Solicitud[]       @relation("SolicitudesComoCliente")
+  solicitudesComoTecnico Solicitud[]       @relation("SolicitudesComoTecnico")
+  historialesCreados     HistorialEstado[] @relation("HistorialCambiadoPor")
+}
+
+model Solicitud {
+  id                 String          @id @default(uuid())
+  titulo             String
+  descripcion        String
+  categoria          CategoriaServicio // PLOMERIA, ELECTRICIDAD, GAS, ...
+  direccion          String
+  estado             EstadoSolicitud @default(PENDIENTE)
+
+  clienteId          String
+  cliente            Usuario         @relation("SolicitudesComoCliente", fields: [clienteId], references: [id])
+
+  tecnicoId          String?
+  tecnico            Usuario?        @relation("SolicitudesComoTecnico", fields: [tecnicoId], references: [id], onDelete: SetNull)
+
+  // Ciclo de vida
+  fechaCreacion      DateTime        @default(now())
+  fechaAceptacion    DateTime?
+  fechaInicio        DateTime?
+  fechaFinalizacion  DateTime?
+  fechaCancelacion   DateTime?
+  motivoCancelacion  String?
+  fechaActualizacion DateTime        @updatedAt
+
+  historial          HistorialEstado[]
+
+  @@map("SolicitudServicio")
+  @@index([clienteId])
+  @@index([tecnicoId])
+  @@index([estado])
+}
+
+model HistorialEstado {
+  id             String          @id @default(uuid())
+  solicitudId    String
+  solicitud      Solicitud       @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+
+  estadoAnterior EstadoSolicitud?
+  estadoNuevo    EstadoSolicitud
+
+  cambiadoPorId  String
+  cambiadoPor    Usuario         @relation("HistorialCambiadoPor", fields: [cambiadoPorId], references: [id])
+
+  motivo         String?
+  fechaCambio    DateTime        @default(now())
+
+  @@map("HistorialEstadoSolicitud")
+  @@index([solicitudId])
+}
