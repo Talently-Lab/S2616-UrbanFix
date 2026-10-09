@@ -26,6 +26,7 @@ Demostrar una SPA completa con autenticación, manejo de múltiples roles, consu
 
 ## Documentación
 Información detallada del proyecto en Confluence: [CUF - Wiki del proyecto](https://stefaniasanudo.atlassian.net/wiki/spaces/CUF/overview)
+Inventario de componentes visuales (tablero Kanban): [COMPONENTES.md](./COMPONENTES.md)
 
 </details>
 
