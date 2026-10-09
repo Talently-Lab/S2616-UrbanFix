@@ -1,59 +1,76 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { Button, ErrorAlert, Input, Select } from '../../components/ui'
 import { ROLES } from '../../constants/roles'
 import { useAuth } from '../../hooks/useAuth'
+import { isMockAuth } from '../../services/auth'
 
 export default function Login() {
-  const { login } = useAuth()
+  const { login, status } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [role, setRole] = useState(ROLES.CLIENTE)
+  const [error, setError] = useState(null)
 
+  const isLoading = status === 'loading'
   const from = location.state?.from?.pathname ?? `/${role}`
 
-  function handleSubmit(event) {
+  async function handleSubmit(event) {
     event.preventDefault()
-    login(email, role)
-    navigate(from, { replace: true })
+    setError(null)
+    try {
+      await login({ email, password, role })
+      navigate(from, { replace: true })
+    } catch (err) {
+      setError(err.message ?? 'No se pudo iniciar sesión')
+    }
   }
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6">
       <h1 className="text-3xl font-bold text-slate-900">Iniciar sesión</h1>
-      <p className="rounded border border-dashed border-slate-300 px-3 py-1 text-xs uppercase tracking-wide text-slate-400">
-        Stub de autenticación (sin backend)
-      </p>
+
+      {isMockAuth() ? (
+        <p className="rounded border border-dashed border-slate-300 px-3 py-1 text-xs uppercase tracking-wide text-slate-400">
+          Auth simulada (sin backend)
+        </p>
+      ) : null}
+
+      {error ? <ErrorAlert message={error} /> : null}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-        <label className="flex flex-col gap-1 text-sm text-slate-700">
-          Email
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="rounded border border-slate-300 px-3 py-2 text-slate-900"
-            placeholder="vo@urbanfix.com"
-          />
-        </label>
+        <Input
+          label="Email"
+          type="email"
+          required
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="vo@urbanfix.com"
+        />
+        <Input
+          label="Contraseña"
+          type="password"
+          required
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="••••••••"
+        />
+        <Select
+          label="Perfil"
+          value={role}
+          onChange={(event) => setRole(event.target.value)}
+          options={[
+            { value: ROLES.CLIENTE, label: 'Cliente' },
+            { value: ROLES.TECNICO, label: 'Técnico' },
+            { value: ROLES.ADMIN, label: 'Administrador' },
+          ]}
+        />
 
-        <label className="flex flex-col gap-1 text-sm text-slate-700">
-          Perfil
-          <select
-            value={role}
-            onChange={(event) => setRole(event.target.value)}
-            className="rounded border border-slate-300 px-3 py-2 text-slate-900"
-          >
-            <option value={ROLES.CLIENTE}>Cliente</option>
-            <option value={ROLES.TECNICO}>Técnico</option>
-            <option value={ROLES.ADMIN}>Administrador</option>
-          </select>
-        </label>
-
-        <button type="submit" className="rounded bg-slate-900 px-4 py-2 text-white">
+        <Button type="submit" loading={isLoading}>
           Entrar
-        </button>
+        </Button>
       </form>
 
       <p className="text-sm text-slate-500">
