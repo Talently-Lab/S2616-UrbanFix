@@ -9,6 +9,7 @@ const router = Router();
 
 router.use('/auth', authRoutes);
 router.use('/usuarios', usuarioRoutes);
+router.use('/users', usuarioRoutes);
 router.use('/admin', adminRoutes);
 router.use('/categorias', categoriaRoutes);
 router.use('/solicitudes', solicitudRoutes);

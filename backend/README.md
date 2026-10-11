@@ -40,8 +40,12 @@ docker compose up -d db
 > ```
 
 ---
-### Todavia no realizar, en semana 4 se agrega el seed.js y los tests en scripts
-### 3. Preparar la Base de Datos
+npx prisma generate
+### Todavia no realizar, en semana 4 se agrega el seed.js y los tests en scripts. Por ahora solo hacer:
+    npx prisma generate
+
+
+### (3. Preparar la Base de Datos) (no hacer)
 
 Desde la carpeta `backend/`, corré las migraciones y los datos de prueba (seeds) con Prisma:
 

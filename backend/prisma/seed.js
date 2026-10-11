@@ -46,7 +46,7 @@ async function main() {
     },
   });
 
-  await prisma.solicitud.upsert({
+  await prisma.solicitudServicio.upsert({
     where: { id: '11111111-aaaa-bbbb-cccc-111111111111' },
     update: {},
     create: {
@@ -57,7 +57,7 @@ async function main() {
       direccion: 'Av. Siempre Viva 742',
       estado: 'PENDIENTE',
       clienteId: cliente.id,
-      historial: {
+      historialEstados: {
         create: {
           estadoAnterior: null,
           estadoNuevo: 'PENDIENTE',
