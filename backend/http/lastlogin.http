@@ -1,0 +1,43 @@
+@base = http://localhost:3001/api
+
+### 1. Login correcto (usuario del seed)
+# @name login
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "nuevo@mail.com",
+  "password": "MinimoOchoCaracteres"
+}
+
+### 2. Login con contraseña incorrecta (debe dar 401 y NO cambiar lastLogin)
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "juan@mail.com",
+  "password": "contraseñaIncorrecta"
+}
+
+### 3. Login con email inexistente (debe dar 401)
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "noexiste@mail.com",
+  "password": "MinimoOchoCaracteres"
+}
+
+### 4. Registrar un usuario nuevo (lastLogin debe quedar NULL)
+POST {{base}}/auth/register
+Content-Type: application/json
+
+{
+  "email": "nuevo@mail.com",
+  "password": "MinimoOchoCaracteres",
+  "nombre": "Usuario Nuevo"
+}
+
+### 5. /me con el token del login (guarda el token de la petición 1)
+GET {{base}}/auth/me
+Authorization: Bearer {{login.response.body.data.token}}

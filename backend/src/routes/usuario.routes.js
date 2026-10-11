@@ -6,6 +6,7 @@ import { updateMeSchema } from '../schemas/auth.schema.js';
 
 const router = Router();
 
+router.get('/me', authenticate, ctrl.getMe);
 router.patch('/me', authenticate, validate(updateMeSchema), ctrl.updateMe);
 
 export default router;

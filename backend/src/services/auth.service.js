@@ -52,7 +52,9 @@ export const login = async (email, password) => {
     throw error;
   }
 
-  const { passwordHash, ...usuario } = user;
+  const { passwordHash, ...usuario } = await prisma.usuario.update({ //extrae la psswordhash del usuario, crea un usuario pero sin el pword
+    where: { id: user.id },
+    data: { lastLogin: new Date() }}); 
   const token = jwt.sign(
     { id: usuario.id, rol: usuario.rol },
     process.env.JWT_SECRET || 'secret',

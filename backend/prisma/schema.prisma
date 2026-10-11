@@ -1,7 +1,7 @@
 datasource db {
   provider = "postgresql"
 }
-
+/*Cada vez que cambies schema.prisma: npx prisma migrate dev --name descripcion_del_cambio, y luego npx prisma generate.*/
 generator client {
   provider = "prisma-client-js"
 }
@@ -24,75 +24,76 @@ enum CategoriaServicio {
 }
 
 enum EstadoSolicitud {
-  PENDIENTE   // Creada por el cliente, esperando asignación/respuesta
-  ACEPTADA    // Técnico aceptó el trabajo
-  RECHAZADA   // Técnico rechazó el trabajo
-  EN_PROCESO  // Trabajo en ejecución
-  FINALIZADA  // Trabajo completado
-  CANCELADA   // Cancelada por el cliente o admin
+  PENDIENTE // Creada por el cliente, esperando asignación/respuesta
+  ACEPTADA // Técnico aceptó el trabajo
+  RECHAZADA // Técnico rechazó el trabajo
+  EN_PROCESO // Trabajo en ejecución
+  FINALIZADA // Trabajo completado
+  CANCELADA // Cancelada por el cliente o admin
 }
 
 model Usuario {
-  id                 String    @id @default(uuid())
-  email              String    @unique
+  id                 String   @id @default(uuid())
+  email              String   @unique
   passwordHash       String
   nombre             String
-  celular            String?   // opcional
-  rol                Rol       @default(CLIENTE)
-  fechaCreacion      DateTime  @default(now())
-  fechaActualizacion DateTime  @updatedAt
+  celular            String? // opcional
+  rol                Rol      @default(CLIENTE)
+  lastLogin          DateTime? //ultimo login exitoso; null = nunca inicio sesion
+  fechaCreacion      DateTime @default(now())
+  fechaActualizacion DateTime @updatedAt
 
   // Relaciones
-  solicitudesComoCliente Solicitud[]       @relation("SolicitudesComoCliente")
-  solicitudesComoTecnico Solicitud[]       @relation("SolicitudesComoTecnico")
-  historialesCreados     HistorialEstado[] @relation("HistorialCambiadoPor")
+  solicitudesComoCliente SolicitudServicio[]        @relation("SolicitudesComoCliente")
+  solicitudesComoTecnico SolicitudServicio[]        @relation("SolicitudesComoTecnico")
+  cambiosDeEstado        HistorialEstadoSolicitud[] @relation("CambiosDeEstado")
 }
 
-model Solicitud {
-  id                 String          @id @default(uuid())
-  titulo             String
-  descripcion        String
-  categoria          CategoriaServicio // PLOMERIA, ELECTRICIDAD, GAS, ...
-  direccion          String
-  estado             EstadoSolicitud @default(PENDIENTE)
+model HistorialEstadoSolicitud {
+  id String @id @default(uuid())
 
-  clienteId          String
-  cliente            Usuario         @relation("SolicitudesComoCliente", fields: [clienteId], references: [id])
+  solicitudId String
+  solicitud   SolicitudServicio @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
 
-  tecnicoId          String?
-  tecnico            Usuario?        @relation("SolicitudesComoTecnico", fields: [tecnicoId], references: [id], onDelete: SetNull)
+  estadoAnterior EstadoSolicitud? // null en el primer registro
+  estadoNuevo    EstadoSolicitud
 
-  // Ciclo de vida
-  fechaCreacion      DateTime        @default(now())
-  fechaAceptacion    DateTime?
-  fechaInicio        DateTime?
-  fechaFinalizacion  DateTime?
-  fechaCancelacion   DateTime?
-  motivoCancelacion  String?
-  fechaActualizacion DateTime        @updatedAt
+  cambiadoPorId String
+  cambiadoPor   Usuario @relation("CambiosDeEstado", fields: [cambiadoPorId], references: [id])
 
-  historial          HistorialEstado[]
+  motivo      String? // útil para rechazos y cancelaciones
+  fechaCambio DateTime @default(now())
 
-  @@map("SolicitudServicio")
+  @@index([solicitudId])
+}
+
+model SolicitudServicio {
+  id          String          @id @default(uuid())
+  titulo      String
+  descripcion String
+  categoria   String // Ej: Plomería, Electricidad, Gas
+  direccion   String
+  estado      EstadoSolicitud @default(PENDIENTE)
+
+  clienteId String
+  cliente   Usuario @relation("SolicitudesComoCliente", fields: [clienteId], references: [id])
+
+  tecnicoId String? //null hasta que un tecnico acepta
+  tecnico   Usuario? @relation("SolicitudesComoTecnico", fields: [tecnicoId], references: [id])
+
+  // Timestamps del ciclo de vida
+  fechaCreacion      DateTime  @default(now())
+  fechaAceptacion    DateTime? // técnico acepta
+  fechaInicio        DateTime? // técnico arranca el trabajo
+  fechaFinalizacion  DateTime? // trabajo completado
+  fechaCancelacion   DateTime? // cancelada por cliente/admin
+  fechaActualizacion DateTime  @updatedAt
+
+  motivoCancelacion String?
+
+  historialEstados HistorialEstadoSolicitud[]
+
   @@index([clienteId])
   @@index([tecnicoId])
   @@index([estado])
-}
-
-model HistorialEstado {
-  id             String          @id @default(uuid())
-  solicitudId    String
-  solicitud      Solicitud       @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
-
-  estadoAnterior EstadoSolicitud?
-  estadoNuevo    EstadoSolicitud
-
-  cambiadoPorId  String
-  cambiadoPor    Usuario         @relation("HistorialCambiadoPor", fields: [cambiadoPorId], references: [id])
-
-  motivo         String?
-  fechaCambio    DateTime        @default(now())
-
-  @@map("HistorialEstadoSolicitud")
-  @@index([solicitudId])
 }
