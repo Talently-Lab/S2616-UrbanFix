@@ -87,14 +87,5 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 
 ## 🎨 Pendientes de diseño
 
-Insumos de UX/UI. Lo resuelto queda marcado con ✅; lo que falta sigue bloqueando la maquetación.
-
-### Semana 1 — ✅ entregado por UX/UI
-- ✅ **Inventario oficial de componentes**: recibido → [data/06-inventario-de-componentes.md](./data/06-inventario-de-componentes.md) (variantes/estados de los genéricos, componentes de dominio D1–D10, mensajes vacíos, layout por rol y orden de entrega).
-
-### Semana 2
-- ✅ **Tokens de diseño**: sistema de diseño base recibido → [data/05-sistema-de-diseno-base.md](./data/05-sistema-de-diseno-base.md) y **ya aplicado** en `frontend/src/index.css` (`@theme`) + componentes de `components/ui`.
-- ✅ **Estados de solicitud y sus colores**: mapping de los 6 estados aplicado en `EstadoSolicitudBadge` (D1).
-- **Prototipo de pantallas públicas**: maquetado real de Home, Login y Registro (con tokens ya aplicados, falta el estilo final del Figma).
-- **Layout de pantallas protegidas**: dónde va el navbar/sidebar por rol (C01–C03) — pendiente de wireframes (§5 del inventario).
-- **Componentes de dominio D2–D10**: `SolicitudCard`, `TrabajoDisponibleCard`, tablas de admin, timeline, filtros, paginación y `ResumenCard` — sé qué datos muestran (§2 del inventario), falta la forma visual.
+> El detalle del seguimiento de diseño vive en [data/07-pendientes-de-diseno.md](./data/07-pendientes-de-diseno.md)
+> (insumos UX/UI, qué está ✅ y qué falta: prototipo de pantallas públicas, layout por rol C01–C03 y D2–D10).
