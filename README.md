@@ -168,7 +168,7 @@ Regla general: si dos componentes no emparentados necesitan el mismo dato, va a 
 - **AuthContext con mock** (`services/auth.js`): mientras el backend no esté listo, `VITE_MOCK_AUTH=true` simula login/register/me (misma API que la real). El token de la sesión se guarda en `localStorage` (`urbanfix.session`) y el interceptor de axios lo adjunta automáticamente.
 - **Tailwind CSS v4** vía plugin `@tailwindcss/vite` (sin `tailwind.config.js`).
 - **Tokens de UX/UI aplicados** (Semana 3): el sistema de diseño base vive en `src/index.css` como `@theme`; los componentes de `components/ui` ya usan los tokens, el foco de 2 px, los 44 px mínimos y la etiqueta visible. **Recibido también el inventario oficial de componentes** (`data/06-inventario-de-componentes.md`).
-- **Pendiente de diseño (UX/UI)**: prototipo de pantallas públicas, layout por rol y los componentes de dominio D2–D10 (`SolicitudCard`, tablas de admin, etc.). Ver [COMPONENTES.md](./COMPONENTES.md).
+- **Pendiente de diseño (UX/UI)**: prototipo de pantallas públicas, layout por rol y los componentes de dominio D2–D10 (`SolicitudCard`, tablas de admin, etc.). Ver [data/07-pendientes-de-diseno.md](./data/07-pendientes-de-diseno.md) (el avance de implementación está en [COMPONENTES.md](./COMPONENTES.md)).
 
 ## Integración con la API (Semana 3)
 
