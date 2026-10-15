@@ -1,24 +1,37 @@
 import { useId } from 'react'
 
+const FIELD =
+  'w-full rounded-field border bg-surface px-3 py-2 text-base text-text placeholder:text-text-muted/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-bg disabled:text-text-muted'
+
 export default function Textarea({ label, error, id, rows = 4, className = '', ...props }) {
   const generatedId = useId()
   const textareaId = id ?? generatedId
+  const border = error ? 'border-error' : 'border-border-input'
+  const tieneLimite = typeof props.maxLength === 'number' && props.value !== undefined
+  const usados = typeof props.value === 'string' ? props.value.length : 0
+  const casiLleno = tieneLimite && usados >= props.maxLength * 0.9
 
   return (
-    <label htmlFor={textareaId} className="flex flex-col gap-1 text-sm text-slate-700">
-      <span>
+    <div className="flex flex-col gap-1 text-sm">
+      <label htmlFor={textareaId} className="font-medium text-text">
         {label}
-        {props.required ? <span className="text-rose-600"> *</span> : null}
-      </span>
+        {props.required ? <span className="text-error"> *</span> : null}
+      </label>
+
       <textarea
         id={textareaId}
         rows={rows}
-        className={`rounded border px-3 py-2 text-slate-900 focus:border-slate-500 focus:outline-none ${
-          error ? 'border-rose-500' : 'border-slate-300'
-        } ${className}`}
+        className={`${FIELD} ${border} ${className}`}
         {...props}
       />
-      {error ? <span className="text-xs text-rose-600">{error}</span> : null}
-    </label>
+
+      {tieneLimite ? (
+        <span className={`text-right text-xs ${casiLleno ? 'text-warning' : 'text-text-muted'}`}>
+          {usados} / {props.maxLength}
+        </span>
+      ) : null}
+
+      {error ? <span className="text-xs text-error">{error}</span> : null}
+    </div>
   )
 }

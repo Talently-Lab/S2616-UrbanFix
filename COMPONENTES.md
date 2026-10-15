@@ -1,8 +1,8 @@
 # Tablero Kanban — Componentes visuales
 
-> **⚠️ Listado provisorio.** Armado por Frontend a partir del MVP descrito en el README.
-> Pendiente de reemplazar por el inventario oficial de UX/UI — [Wiki del proyecto](https://stefaniasanudo.atlassian.net/wiki/spaces/CUF/overview).
-> Cuando llegue el diseño, se ajustan/eliminan tarjetas y se agregan las que falten.
+> **Inventario oficial recibido (UX/UI).** Ver [data/06-inventario-de-componentes.md](./data/06-inventario-de-componentes.md)
+> y los tokens en [data/05-sistema-de-diseno-base.md](./data/05-sistema-de-diseno-base.md) — ya aplicados en el código
+> (`frontend/src/index.css` + `components/ui`). Este tablero se mantiene como kanban de avance.
 
 Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog` · `Maquetando` · `Listo`.
 
@@ -23,7 +23,7 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 | C09 | `SolicitudCard` | `/cliente/solicitudes` | Card con estado, oficio y fecha |
 | C10 | `SolicitudForm` | `/cliente/solicitudes/nueva` | Alta de solicitud (oficio, descripción, zona) |
 | C11 | `SolicitudDetalle` | `/cliente/solicitudes/:id` | Detalle + timeline de estado |
-| C12 | `EstadoSolicitudTag` | listados y detalle | Se puede reusar `Badge` con mapeo de estados |
+| C12 | `EstadoSolicitudTag` | listados y detalle | **Implementado como D1** `EstadoSolicitudBadge` (ícono + texto + color por estado) |
 
 ### 🔧 Técnico (`/tecnico`)
 | # | Componente | Ruta / uso | Notas |
@@ -55,18 +55,20 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 
 ## Listo
 
-> Componentes genéricos del design system (`frontend/src/components/ui`). Estilo neutro con Tailwind: cuando llegue el Figma solo se ajustan tokens (colores/tipografía).
+> Componentes genéricos del design system (`frontend/src/components/ui`) con los **tokens de UX/UI ya aplicados**
+> (paleta, Inter, radios 6/12, foco 2 px, alto mínimo 44 px, etiqueta visible).
 
 | # | Componente | Props | Estados |
 |---|-------------|-------|---------|
-| C07 | `RoleBadge` | `role` (cliente/tecnico/admin) | — |
-| C24 | `Button` | `variant` (primary/secondary/danger/ghost), `loading`, `disabled`, `type` | `loading`: spinner + deshabilitado |
-| C25 | `Input` / `Select` / `Textarea` | `label`, `error`, `required` | `error`: borde rose + mensaje |
+| C07 | `RoleBadge` | `role` (cliente/tecnico/admin) | etiqueta capitalizada |
+| C24 | `Button` / `ButtonLink` | `variant` (primary/secondary/danger/ghost), `loading`, `disabled`, `type` · `to` en ButtonLink | `loading`: spinner + deshabilitado |
+| C25 | `Input` / `Select` / `Textarea` | `label`, `error`, `required`; `options` en Select; `maxLength` en Textarea | `error`: borde + mensaje; mostrar/ocultar contraseña; contador de caracteres |
 | C26 | `Modal` | `open`, `onClose`, `title`, `footer` | cerrado (`null`); Esc y click fuera cierran |
 | C27 | `Spinner` | `size` (sm/md/lg) | — |
-| C28 | `EmptyState` | `title`, `description`, `action` | empty state |
+| C28 | `EmptyState` | `title`, `description`, `action` | empty state (mensajes en `constants/mensajesVacios.js`) |
 | C29 | `ErrorAlert` | `message`, `onRetry` | error state (+ botón reintentar) |
 | C30 | `Toast` | `useToast().show(message, type)` | info/success/error; auto-cierra a los 4s |
+| D1 | `EstadoSolicitudBadge` | `estado` (6 estados) | ícono + texto + color por estado |
 
 ### Estado global (no es componente visual, pero está listo)
 
@@ -85,14 +87,14 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 
 ## 🎨 Pendientes de diseño
 
-Insumos del prototipo que faltan para avanzar con la maquetación. La lógica, los servicios y los componentes genéricos ya están listos; la maquetación arranca apenas estén estos insumos.
+Insumos de UX/UI. Lo resuelto queda marcado con ✅; lo que falta sigue bloqueando la maquetación.
 
-### Semana 1
-- **Inventario oficial de componentes**: confirmar sobre el prototipo qué componentes existen realmente y sus variantes.
+### Semana 1 — ✅ entregado por UX/UI
+- ✅ **Inventario oficial de componentes**: recibido → [data/06-inventario-de-componentes.md](./data/06-inventario-de-componentes.md) (variantes/estados de los genéricos, componentes de dominio D1–D10, mensajes vacíos, layout por rol y orden de entrega).
 
 ### Semana 2
-- **Tokens de diseño**: paleta de colores, tipografía, espaciados y radii. Hoy el design system (`src/components/ui`) usa estilos neutros de Tailwind; sin tokens no se puede personalizar.
-- **Prototipo de pantallas públicas**: maquetado real de Home, Login y Registro. Hoy están funcionales pero con estilo genérico.
-- **Layout de pantallas protegidas**: dónde va el navbar/sidebar por rol (C01–C03).
-- **Componentes de dominio con forma definida**: `SolicitudCard`, `TrabajoDisponibleCard`, tablas de admin (C20–C21) y contenido de los dashboards (C08, C14, C19) — sé qué datos muestran, no cómo los dispone el diseño.
-- **Estados de solicitud y sus colores**: mapping visual (ej. `pendiente` = amber) para `EstadoSolicitudTag` (C12).
+- ✅ **Tokens de diseño**: sistema de diseño base recibido → [data/05-sistema-de-diseno-base.md](./data/05-sistema-de-diseno-base.md) y **ya aplicado** en `frontend/src/index.css` (`@theme`) + componentes de `components/ui`.
+- ✅ **Estados de solicitud y sus colores**: mapping de los 6 estados aplicado en `EstadoSolicitudBadge` (D1).
+- **Prototipo de pantallas públicas**: maquetado real de Home, Login y Registro (con tokens ya aplicados, falta el estilo final del Figma).
+- **Layout de pantallas protegidas**: dónde va el navbar/sidebar por rol (C01–C03) — pendiente de wireframes (§5 del inventario).
+- **Componentes de dominio D2–D10**: `SolicitudCard`, `TrabajoDisponibleCard`, tablas de admin, timeline, filtros, paginación y `ResumenCard` — sé qué datos muestran (§2 del inventario), falta la forma visual.
