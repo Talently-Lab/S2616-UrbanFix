@@ -1,11 +1,28 @@
 import PagePlaceholder from '../../components/layout/PagePlaceholder'
+import EmptyState from '../../components/ui/EmptyState'
+import ButtonLink from '../../components/ui/ButtonLink'
+import { useAuth } from '../../hooks/useAuth'
+import { MENSAJES_VACIOS } from '../../constants/mensajesVacios'
 
 export function ClienteDashboard() {
+  const { user } = useAuth()
+
   return (
-    <PagePlaceholder
-      title="Panel del cliente"
-      description="Resumen de solicitudes de servicio creadas y su estado."
-    />
+    <div className="flex flex-col gap-8">
+      <header>
+        <h1 className="text-2xl font-bold text-text">Hola, {user?.name} 👋</h1>
+        <p className="mt-1 text-text-muted">¿En qué necesitás ayuda hoy?</p>
+      </header>
+
+      <EmptyState
+        title={MENSAJES_VACIOS.clienteSolicitudes}
+        action={
+          <ButtonLink to="/cliente/solicitudes/nueva" variant="primary">
+            Nueva solicitud
+          </ButtonLink>
+        }
+      />
+    </div>
   )
 }
 
