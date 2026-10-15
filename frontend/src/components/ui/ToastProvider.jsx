@@ -2,9 +2,9 @@ import { useCallback, useMemo, useState } from 'react'
 import { ToastContext } from './toast-context'
 
 const TONES = {
-  success: 'bg-emerald-600 text-white',
-  error: 'bg-rose-600 text-white',
-  info: 'bg-slate-800 text-white',
+  success: 'bg-success text-white',
+  error: 'bg-error text-white',
+  info: 'bg-info text-white',
 }
 
 let nextId = 0
@@ -36,7 +36,7 @@ export default function ToastProvider({ children }) {
           <div
             key={toast.id}
             role="status"
-            className={`flex items-center gap-4 rounded px-4 py-3 text-sm shadow-lg ${TONES[toast.type]}`}
+            className={`flex items-center gap-4 rounded-field px-4 py-3 text-sm shadow-md ${TONES[toast.type] ?? TONES.info}`}
           >
             <span>{toast.message}</span>
             <button

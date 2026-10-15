@@ -30,10 +30,10 @@ export default function Login() {
 
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center gap-6 px-6">
-      <h1 className="text-3xl font-bold text-slate-900">Iniciar sesión</h1>
+      <h1 className="text-3xl font-bold text-text">Iniciar sesión</h1>
 
       {isMockAuth() ? (
-        <p className="rounded border border-dashed border-slate-300 px-3 py-1 text-xs uppercase tracking-wide text-slate-400">
+        <p className="rounded border border-dashed border-border px-3 py-1 text-xs uppercase tracking-wide text-text-muted">
           Auth simulada (sin backend)
         </p>
       ) : null}
@@ -75,7 +75,7 @@ export default function Login() {
         </Button>
       </form>
 
-      <p className="text-sm text-slate-500">
+      <p className="text-sm text-text-muted">
         ¿No tenés cuenta?{' '}
         <Link className="underline" to="/registro">
           Crear cuenta

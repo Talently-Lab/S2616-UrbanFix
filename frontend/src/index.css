@@ -1,1 +1,48 @@
 @import 'tailwindcss';
+
+/*
+  Design system base — UrbanFix
+  Fuente: "Sistema de diseño base (propuesta)" de UX/UI (KAN-13).
+  Paleta mapeada 1:1 a la tabla de tokens; Tailwind v4 expone cada
+  --color-* como utilidad (bg-primary, text-text-muted, border-border-input…).
+*/
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Marca y neutros */
+  --color-primary: #1d4ed8;
+  --color-primary-hover: #1e40af;
+  --color-accent: #c2410c;
+  --color-text: #111827;
+  --color-text-muted: #4b5563;
+  --color-bg: #f9fafb;
+  --color-surface: #ffffff;
+  --color-border: #d1d5db;
+  --color-border-input: #6b7280;
+
+  /* Semánticos */
+  --color-success: #15803d;
+  --color-warning: #b45309;
+  --color-error: #b91c1c;
+  --color-info: #0369a1;
+
+  /* Radios: 6px campos/botones · 12px tarjetas/modales · full etiquetas */
+  --radius-field: 6px;
+  --radius-card: 12px;
+
+  /* Puntos de corte (360 el de referencia en móvil) */
+  --breakpoint-xs: 360px;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+  }
+
+  /* Foco visible en todos los elementos interactivos (anillo 2px primary) */
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}

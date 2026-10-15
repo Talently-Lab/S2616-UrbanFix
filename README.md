@@ -102,18 +102,51 @@ frontend/src/
     └── auth.js            # login, register, me (mock o API real)
 ```
 
+### Sistema de diseño
+
+Fuente: [data/05-sistema-de-diseno-base.md](./data/05-sistema-de-diseno-base.md) y
+[data/06-inventario-de-componentes.md](./data/06-inventario-de-componentes.md) (UX/UI, KAN-13).
+
+**Tokens** declarados en `@theme` de `src/index.css` (Tailwind v4) — cada `--color-*` genera sus
+propias utilidades (`bg-primary`, `text-text-muted`, `border-border-input`…):
+
+| Grupo | Tokens |
+|-------|--------|
+| Marca y neutros | `primary` `primary-hover` `accent` `text` `text-muted` `bg` `surface` `border` `border-input` |
+| Semánticos | `success` `warning` `error` `info` |
+| Radios | `rounded-field` (6 px) · `rounded-card` (12 px) · `rounded-full` (etiquetas) |
+| Tipografía | Inter (Google Fonts en `index.html`), pesos 400/500/600/700 |
+| Breakpoints | `xs: 360` (referencia móvil) · `md: 768` · `lg: 1024` · `xl: 1280` |
+
+Reglas aplicadas: foco visible de 2 px con `primary` (`:focus-visible` global en `index.css`),
+alto mínimo de 44 px en botones y controles (`min-h-11`), etiqueta visible en cada campo, y
+borde de campos con `border-input` (nunca `border`, no alcanza el contraste).
+
 ### Design system base (`src/components/ui`)
 
-| Componente | Props principales | Estados |
-|------------|-------------------|---------|
-| `Button` | `variant` (primary/secondary/danger/ghost), `loading`, `disabled` | loading (spinner + disabled) |
-| `Input` / `Select` / `Textarea` | `label`, `error`, `required` | error (borde + mensaje) |
-| `Modal` | `open`, `onClose`, `title`, `footer` | cerrado (`null`), Esc cierra |
+| Componente | Props principales | Estados / novedades |
+|------------|-------------------|---------------------|
+| `Button` | `variant` (primary/secondary/danger/ghost), `loading`, `disabled` | loading (spinner + disabled), min 44 px, foco 2 px |
+| `ButtonLink` | `to`, `variant` | link con aspecto de botón (no anida `Button` en `Link`) |
+| `Input` | `label`, `error`, `required`, `type` | error (borde + mensaje), **mostrar/ocultar contraseña** |
+| `Select` | `label`, `error`, `options` | error, min 44 px |
+| `Textarea` | `label`, `error`, `maxLength` | error, **contador de caracteres** (warning al 90 %) |
+| `Modal` | `open`, `onClose`, `title`, `footer` | cerrado (`null`), Esc cierra, radio 12 px |
 | `Badge` | `tone` (slate/emerald/amber/rose) | — |
 | `Spinner` | `size` (sm/md/lg) | — |
 | `EmptyState` | `title`, `description`, `action` | empty state |
 | `ErrorAlert` | `message`, `onRetry` | error state (+ reintentar) |
-| `ToastProvider` + `useToast` | `show(message, type)` | info/success/error, auto-cierra a los 4s |
+| `ToastProvider` + `useToast` | `show(message, type)` | info/success/error con tokens semánticos, auto-cierra a los 4s |
+| `RoleBadge` | `role` | etiqueta capitalizada (Cliente / Técnico / Admin) |
+
+### Componentes de dominio y constantes
+
+| Archivo | Qué aporta |
+|---------|-----------|
+| `components/solicitudes/EstadoSolicitudBadge.jsx` | **D1**: etiqueta con ícono + texto para los 6 estados, con los pares texto/fondo del sistema de diseño |
+| `constants/estadosSolicitud.js` | códigos y etiquetas de `PENDIENTE … CANCELADA` + `opcionesEstados()` |
+| `constants/categorias.js` | las 8 categorías del backend + `etiquetaCategoria()` / `opcionesCategorias()` |
+| `constants/mensajesVacios.js` | mensajes de estado vacío (§3 del inventario) para `EmptyState` |
 
 ### Estado: contexto global vs local
 
@@ -134,7 +167,8 @@ Regla general: si dos componentes no emparentados necesitan el mismo dato, va a 
 - **React Router con `createBrowserRouter`**: rutas protegidas por rol con `ProtectedRoute` + `Navigate`; placeholders por página hasta la maquetación de diseño.
 - **AuthContext con mock** (`services/auth.js`): mientras el backend no esté listo, `VITE_MOCK_AUTH=true` simula login/register/me (misma API que la real). El token de la sesión se guarda en `localStorage` (`urbanfix.session`) y el interceptor de axios lo adjunta automáticamente.
 - **Tailwind CSS v4** vía plugin `@tailwindcss/vite` (sin `tailwind.config.js`).
-- **Pendiente de diseño (UX/UI)**: maquetado final de pantallas y componentes de dominio (`SolicitudCard`, tablas de admin, etc.). Ver [COMPONENTES.md](./COMPONENTES.md).
+- **Tokens de UX/UI aplicados** (Semana 3): el sistema de diseño base vive en `src/index.css` como `@theme`; los componentes de `components/ui` ya usan los tokens, el foco de 2 px, los 44 px mínimos y la etiqueta visible. **Recibido también el inventario oficial de componentes** (`data/06-inventario-de-componentes.md`).
+- **Pendiente de diseño (UX/UI)**: prototipo de pantallas públicas, layout por rol y los componentes de dominio D2–D10 (`SolicitudCard`, tablas de admin, etc.). Ver [COMPONENTES.md](./COMPONENTES.md).
 
 ## Integración con la API (Semana 3)
 

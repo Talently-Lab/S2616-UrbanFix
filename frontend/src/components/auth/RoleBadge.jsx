@@ -6,6 +6,12 @@ const TONES = {
   admin: 'amber',
 }
 
+const LABELS = {
+  cliente: 'Cliente',
+  tecnico: 'Técnico',
+  admin: 'Admin',
+}
+
 export default function RoleBadge({ role }) {
-  return <Badge tone={TONES[role] ?? 'slate'}>{role}</Badge>
+  return <Badge tone={TONES[role] ?? 'slate'}>{LABELS[role] ?? role}</Badge>
 }
