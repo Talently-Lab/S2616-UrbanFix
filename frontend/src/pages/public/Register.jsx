@@ -12,6 +12,7 @@ export default function Register() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [celular, setCelular] = useState('')
   const [role, setRole] = useState(ROLES.CLIENTE)
   const [error, setError] = useState(null)
 
@@ -21,9 +22,9 @@ export default function Register() {
     event.preventDefault()
     setError(null)
     try {
-      await register({ name, email, password, role })
+      const session = await register({ name, email, password, celular, role })
       show('Cuenta creada con éxito', 'success')
-      navigate(`/${role}`, { replace: true })
+      navigate(`/${session.user.role}`, { replace: true })
     } catch (err) {
       setError(err.message ?? 'No se pudo crear la cuenta')
     }
@@ -55,10 +56,17 @@ export default function Register() {
           label="Contraseña"
           type="password"
           required
-          minLength={6}
+          minLength={8}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
-          placeholder="Mínimo 6 caracteres"
+          placeholder="Mínimo 8 caracteres"
+        />
+        <Input
+          label="Celular (opcional)"
+          type="tel"
+          value={celular}
+          onChange={(event) => setCelular(event.target.value)}
+          placeholder="388 412 3456"
         />
         <Select
           label="Me registro como"

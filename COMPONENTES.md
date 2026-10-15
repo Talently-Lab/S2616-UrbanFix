@@ -49,8 +49,8 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 
 | # | Componente | Ruta / uso | Notas |
 |---|-------------|-----------|-------|
-| C05 | `LoginForm` | `/login` | Funcional con `useAuth` + `Input`/`Button`/`ErrorAlert`; pendiente estilo del Figma |
-| C06 | `RegisterForm` | `/registro` | Funcional con `useAuth` + toast de éxito; pendiente estilo del Figma |
+| C05 | `LoginForm` | `/login` | Conectado a `POST /auth/login` (Semana 3): redirect según el rol que devuelve la API, selector de perfil sólo en modo mock; pendiente estilo del Figma |
+| C06 | `RegisterForm` | `/registro` | Conectado a `POST /auth/register` (nombre, celular opcional, rol, password ≥ 8) con toast de éxito; pendiente estilo del Figma |
 | C13 | `PerfilCliente` | `/cliente/perfil` | Placeholders de datos, falta formulario real |
 
 ## Listo
@@ -72,7 +72,8 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 
 - **`AuthContext`** (`src/context/AuthContext.jsx`): `user`, `role`, `status` (`idle`/`loading`/`error`/`authenticated`), `login`, `register`, `logout`. Persiste sesión en `localStorage` y la restaura al recargar. Mock activo hasta que el backend publique `/auth/*`.
 - **`ProtectedRoute`** (`src/components/auth/ProtectedRoute.jsx`): guard por rol; muestra `Spinner` mientras restaura sesión.
-- **Interceptor de axios** (`src/services/client.js`): adjunta el token a cada request.
+- **Interceptor de axios** (`src/services/api.js`): adjunta el token a cada request y, ante un `401`, limpia la sesión y redirige a `/login` (`client.js` queda como alias).
+- **Adaptador de contrato** (`src/services/auth.js`): aplana `{ data: { usuario, token } }` del backend a `{ token, user }` y mapea `rol` → `role`, `nombre` → `name`.
 
 ### Convenciones
 - Componentes en `frontend/src/components/<dominio>/`, páginas (rutables) en `frontend/src/pages/<perfil>/`, design system en `frontend/src/components/ui/`.

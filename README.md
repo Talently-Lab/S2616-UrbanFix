@@ -78,7 +78,7 @@ Copiar `.env.example` a `.env`:
 
 | Variable | Descripción |
 |----------|-------------|
-| `VITE_API_URL` | URL base de la API REST para axios |
+| `VITE_API_URL` | URL base de la API REST para axios. Default `http://localhost:3001/api` |
 | `VITE_MOCK_AUTH` | `true` (default): auth simulada en el frontend. `false`: login/register/me reales contra la API |
 
 ## Arquitectura frontend (Semana 2)
@@ -97,8 +97,9 @@ frontend/src/
 ├── pages/                 # vistas completas por ruta (public, cliente, tecnico, admin)
 ├── routes/index.jsx       # definición de rutas (React Router)
 └── services/              # acceso a datos (axios)
-    ├── client.js          # instancia de axios + interceptor de token
-    └── auth.js            # login, register, me (con mock)
+    ├── api.js             # instancia de axios + interceptores (token y 401)
+    ├── client.js          # alias de api.js (compatibilidad con imports existentes)
+    └── auth.js            # login, register, me (mock o API real)
 ```
 
 ### Design system base (`src/components/ui`)
@@ -134,6 +135,19 @@ Regla general: si dos componentes no emparentados necesitan el mismo dato, va a 
 - **AuthContext con mock** (`services/auth.js`): mientras el backend no esté listo, `VITE_MOCK_AUTH=true` simula login/register/me (misma API que la real). El token de la sesión se guarda en `localStorage` (`urbanfix.session`) y el interceptor de axios lo adjunta automáticamente.
 - **Tailwind CSS v4** vía plugin `@tailwindcss/vite` (sin `tailwind.config.js`).
 - **Pendiente de diseño (UX/UI)**: maquetado final de pantallas y componentes de dominio (`SolicitudCard`, tablas de admin, etc.). Ver [COMPONENTES.md](./COMPONENTES.md).
+
+## Integración con la API (Semana 3)
+
+El frontend se adaptó al contrato del backend (`backend/docs/API_CONTRACT.md`) **sin modificar nada de `backend/`**:
+
+- **`services/api.js`**: instancia de axios con `baseURL` = `VITE_API_URL` (default `http://localhost:3001/api`).
+  - *Request*: adjunta `Authorization: Bearer <token>` desde `localStorage` (`urbanfix.session`).
+  - *Response*: ante un `401` limpia la sesión y redirige a `/login` (con guard para no entrar en bucle si ya estás en `/login`).
+- **Envoltorio**: el backend responde `{ data: { usuario, token } }`; `services/auth.js` lo aplana a `{ token, user }` y mapea `usuario.rol` → `user.role` (minúsculas, igual que `ROLES`) y `usuario.nombre` → `user.name`. Por eso el resto de la app (`ProtectedRoute`, `RoleBadge`, `Home`) no cambió.
+- **Errores**: `extractErrorMessage()` lee `error.response.data.error.message` y devuelve un `Error` con mensaje legible para el `ErrorAlert`.
+- **Registro**: envía `{ email, password, nombre, celular?, rol }`, con contraseña mínima de 8 caracteres (zod en el backend). Solo `CLIENTE`/`TECNICO`, igual que el contrato.
+- **Login**: el backend recibe sólo `{ email, password }`; la redirección post-login usa el `role` que devuelve la API. En modo mock sigue existiendo el selector de perfil para probar las rutas por rol.
+- **Falta del lado del backend** (no tocado): levantar Postgres + `prisma migrate` + seed y publicar la API en `:3001` para poder probar el flujo real de punta a punta.
 
 
 ## Backend
