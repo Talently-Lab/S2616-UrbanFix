@@ -1,4 +1,4 @@
-import { api } from './client'
+import api, { extractErrorMessage } from './api'
 
 const MOCK_ENABLED = import.meta.env.VITE_MOCK_AUTH !== 'false'
 const STORAGE_KEY = 'urbanfix.session'
@@ -16,6 +16,24 @@ function readStoredSession() {
   }
 }
 
+function normalizeUser(usuario) {
+  return {
+    id: usuario.id ?? null,
+    email: usuario.email,
+    name: usuario.nombre ?? usuario.name ?? '',
+    role: (usuario.rol ?? usuario.role ?? 'cliente').toLowerCase(),
+    celular: usuario.celular ?? null,
+    fechaCreacion: usuario.fechaCreacion ?? null,
+  }
+}
+
+function toSession(payload) {
+  return {
+    token: payload.token,
+    user: normalizeUser(payload.usuario ?? payload.user),
+  }
+}
+
 export async function login({ email, password, role }) {
   if (MOCK_ENABLED) {
     await delay(400)
@@ -25,11 +43,15 @@ export async function login({ email, password, role }) {
     if (!password) {
       throw new Error('La contraseña es obligatoria')
     }
-    return { token: 'mock-token', user: { email, role: role ?? 'cliente' } }
+    return { token: 'mock-token', user: normalizeUser({ email, rol: role ?? 'cliente' }) }
   }
 
-  const { data } = await api.post('/auth/login', { email, password })
-  return data
+  try {
+    const { data } = await api.post('/auth/login', { email, password })
+    return toSession(data.data)
+  } catch (err) {
+    throw new Error(extractErrorMessage(err, 'No se pudo iniciar sesión'))
+  }
 }
 
 export async function register(payload) {
@@ -38,17 +60,28 @@ export async function register(payload) {
     if (!payload.email?.includes('@')) {
       throw new Error('Ingresá un email válido')
     }
-    if (!payload.password || payload.password.length < 6) {
-      throw new Error('La contraseña debe tener al menos 6 caracteres')
+    if (!payload.password || payload.password.length < 8) {
+      throw new Error('La contraseña debe tener al menos 8 caracteres')
     }
     return {
       token: 'mock-token',
-      user: { email: payload.email, role: payload.role ?? 'cliente' },
+      user: normalizeUser({ email: payload.email, nombre: payload.name, rol: payload.role }),
     }
   }
 
-  const { data } = await api.post('/auth/register', payload)
-  return data
+  try {
+    const body = {
+      email: payload.email,
+      password: payload.password,
+      nombre: payload.name,
+      celular: payload.celular || null,
+      rol: payload.role?.toUpperCase() ?? 'CLIENTE',
+    }
+    const { data } = await api.post('/auth/register', body)
+    return toSession(data.data)
+  } catch (err) {
+    throw new Error(extractErrorMessage(err, 'No se pudo crear la cuenta'))
+  }
 }
 
 export async function me() {
@@ -61,8 +94,12 @@ export async function me() {
     return stored.user
   }
 
-  const { data } = await api.get('/auth/me')
-  return data
+  try {
+    const { data } = await api.get('/auth/me')
+    return normalizeUser(data.data)
+  } catch (err) {
+    throw new Error(extractErrorMessage(err, 'La sesión no es válida'))
+  }
 }
 
 export function isMockAuth() {

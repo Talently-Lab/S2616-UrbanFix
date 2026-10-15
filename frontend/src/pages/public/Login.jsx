@@ -15,14 +15,14 @@ export default function Login() {
   const [error, setError] = useState(null)
 
   const isLoading = status === 'loading'
-  const from = location.state?.from?.pathname ?? `/${role}`
+  const from = location.state?.from?.pathname
 
   async function handleSubmit(event) {
     event.preventDefault()
     setError(null)
     try {
-      await login({ email, password, role })
-      navigate(from, { replace: true })
+      const session = await login({ email, password, role })
+      navigate(from ?? `/${session.user.role}`, { replace: true })
     } catch (err) {
       setError(err.message ?? 'No se pudo iniciar sesión')
     }
@@ -57,16 +57,18 @@ export default function Login() {
           onChange={(event) => setPassword(event.target.value)}
           placeholder="••••••••"
         />
-        <Select
-          label="Perfil"
-          value={role}
-          onChange={(event) => setRole(event.target.value)}
-          options={[
-            { value: ROLES.CLIENTE, label: 'Cliente' },
-            { value: ROLES.TECNICO, label: 'Técnico' },
-            { value: ROLES.ADMIN, label: 'Administrador' },
-          ]}
-        />
+        {isMockAuth() ? (
+          <Select
+            label="Perfil"
+            value={role}
+            onChange={(event) => setRole(event.target.value)}
+            options={[
+              { value: ROLES.CLIENTE, label: 'Cliente' },
+              { value: ROLES.TECNICO, label: 'Técnico' },
+              { value: ROLES.ADMIN, label: 'Administrador' },
+            ]}
+          />
+        ) : null}
 
         <Button type="submit" loading={isLoading}>
           Entrar
