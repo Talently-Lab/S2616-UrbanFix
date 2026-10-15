@@ -1,11 +1,22 @@
 import PagePlaceholder from '../../components/layout/PagePlaceholder'
+import EmptyState from '../../components/ui/EmptyState'
+import { useAuth } from '../../hooks/useAuth'
 
 export function AdminDashboard() {
+  const { user } = useAuth()
+
   return (
-    <PagePlaceholder
-      title="Panel de administración"
-      description="Indicadores generales de la plataforma."
-    />
+    <div className="flex flex-col gap-8">
+      <header>
+        <h1 className="text-2xl font-bold text-text">Hola, {user?.name} 👋</h1>
+        <p className="mt-1 text-text-muted">Indicadores generales de la plataforma.</p>
+      </header>
+
+      <EmptyState
+        title="Todavía no hay indicadores para mostrar."
+        description="Cuando haya solicitudes y usuarios en la plataforma, los KPIs van a aparecer acá."
+      />
+    </div>
   )
 }
 

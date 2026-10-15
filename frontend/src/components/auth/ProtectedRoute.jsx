@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom'
 import Spinner from '../ui/Spinner'
+import AppShell from '../layout/AppShell'
 import { useAuth } from '../../hooks/useAuth'
 
 export default function ProtectedRoute({ roles }) {
@@ -22,5 +23,9 @@ export default function ProtectedRoute({ roles }) {
     return <Navigate to="/acceso-denegado" replace />
   }
 
-  return <Outlet />
+  return (
+    <AppShell>
+      <Outlet />
+    </AppShell>
+  )
 }

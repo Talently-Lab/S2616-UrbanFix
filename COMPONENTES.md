@@ -11,15 +11,12 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 ### 🧱 Layout
 | # | Componente | Ruta / uso | Notas |
 |---|-------------|-----------|-------|
-| C01 | `AppShell` | todas las rutas protegidas | Layout con header, nav según rol y `<Outlet/>` |
-| C02 | `Navbar` | todas | Logo + links de navegación + logout |
-| C03 | `SidebarNav` | `/cliente`, `/tecnico`, `/admin` | Menú lateral con secciones por perfil |
+| C03 | `SidebarNav` | `/cliente`, `/tecnico`, `/admin` | Menú lateral con secciones por perfil (pantalla de escritorio para admin) |
 | C04 | `Footer` | públicas | Info básica, links |
 
 ### 👤 Cliente (`/cliente`)
 | # | Componente | Ruta / uso | Notas |
 |---|-------------|-----------|-------|
-| C08 | `ClienteDashboard` | `/cliente` | Resumen de solicitudes y estados |
 | C09 | `SolicitudCard` | `/cliente/solicitudes` | Card con estado, oficio y fecha |
 | C10 | `SolicitudForm` | `/cliente/solicitudes/nueva` | Alta de solicitud (oficio, descripción, zona) |
 | C11 | `SolicitudDetalle` | `/cliente/solicitudes/:id` | Detalle + timeline de estado |
@@ -28,7 +25,6 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 ### 🔧 Técnico (`/tecnico`)
 | # | Componente | Ruta / uso | Notas |
 |---|-------------|-----------|-------|
-| C14 | `TecnicoDashboard` | `/tecnico` | Métricas y trabajos del día |
 | C15 | `TrabajoDisponibleCard` | `/tecnico/disponibles` | Card con acciones Aceptar / Rechazar |
 | C16 | `TrabajoCard` | `/tecnico/trabajos` | Card de trabajos aceptados/asignados |
 | C17 | `TrabajoDetalle` | `/tecnico/trabajos/:id` | Detalle + cambiar estado |
@@ -37,7 +33,6 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 ### 🛠️ Administrador (`/admin`)
 | # | Componente | Ruta / uso | Notas |
 |---|-------------|-----------|-------|
-| C19 | `AdminDashboard` | `/admin` | KPIs de la plataforma |
 | C20 | `UsuarioTable` | `/admin/usuarios` | Tabla con acciones de rol |
 | C21 | `SolicitudesTable` | `/admin/solicitudes` | Tabla global de solicitudes |
 | C22 | `ReportePanel` | `/admin/reportes` | Reportes operativos |
@@ -49,6 +44,11 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 
 | # | Componente | Ruta / uso | Notas |
 |---|-------------|-----------|-------|
+| C01 | `AppShell` | todas las rutas protegidas | **Carcasa lista**: Navbar + `<Outlet/>` en `max-w-5xl`, envuelve las rutas desde `ProtectedRoute` (Semana 4); falta el wireframe final de layout por rol |
+| C02 | `Navbar` | todas | **Carcasa lista**: logo, links según rol (§5 del inventario), nombre + `RoleBadge` + botón Salir; barra superior en los 3 roles, falta el wireframe final |
+| C08 | `ClienteDashboard` | `/cliente` | **Carcasa lista**: saludo con `user.name` del contexto + `EmptyState` con mensaje §3 y CTA "Nueva solicitud"; falta el diseño final |
+| C14 | `TecnicoDashboard` | `/tecnico` | **Carcasa lista**: saludo con contexto + `EmptyState` "Todavía no tenés trabajos." con CTA a Disponibles |
+| C19 | `AdminDashboard` | `/admin` | **Carcasa lista**: saludo con contexto + `EmptyState` de indicadores; los KPIs (D10) esperan diseño |
 | C05 | `LoginForm` | `/login` | Conectado a `POST /auth/login` (Semana 3): redirect según el rol que devuelve la API, selector de perfil sólo en modo mock; pendiente estilo del Figma |
 | C06 | `RegisterForm` | `/registro` | Conectado a `POST /auth/register` (nombre, celular opcional, rol, password ≥ 8) con toast de éxito; pendiente estilo del Figma |
 | C13 | `PerfilCliente` | `/cliente/perfil` | Placeholders de datos, falta formulario real |
