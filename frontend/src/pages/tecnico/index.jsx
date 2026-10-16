@@ -1,30 +1,6 @@
 import PagePlaceholder from '../../components/layout/PagePlaceholder'
-import EmptyState from '../../components/ui/EmptyState'
-import ButtonLink from '../../components/ui/ButtonLink'
-import { useAuth } from '../../hooks/useAuth'
-import { MENSAJES_VACIOS } from '../../constants/mensajesVacios'
 
-export function TecnicoDashboard() {
-  const { user } = useAuth()
-
-  return (
-    <div className="flex flex-col gap-8">
-      <header>
-        <h1 className="text-2xl font-bold text-text">Hola, {user?.name} 👋</h1>
-        <p className="mt-1 text-text-muted">Estos son tus trabajos de hoy.</p>
-      </header>
-
-      <EmptyState
-        title={MENSAJES_VACIOS.tecnicoTrabajos}
-        action={
-          <ButtonLink to="/tecnico/disponibles" variant="primary">
-            Ir a trabajos disponibles
-          </ButtonLink>
-        }
-      />
-    </div>
-  )
-}
+export { default as TecnicoDashboard } from './Dashboard'
 
 export function TecnicoDisponibles() {
   return (

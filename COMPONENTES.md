@@ -17,8 +17,6 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 ### 👤 Cliente (`/cliente`)
 | # | Componente | Ruta / uso | Notas |
 |---|-------------|-----------|-------|
-| C09 | `SolicitudCard` | `/cliente/solicitudes` | Card con estado, oficio y fecha |
-| C10 | `SolicitudForm` | `/cliente/solicitudes/nueva` | Alta de solicitud (oficio, descripción, zona) |
 | C11 | `SolicitudDetalle` | `/cliente/solicitudes/:id` | Detalle + timeline de estado |
 | C12 | `EstadoSolicitudTag` | listados y detalle | **Implementado como D1** `EstadoSolicitudBadge` (ícono + texto + color por estado) |
 
@@ -46,9 +44,12 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 |---|-------------|-----------|-------|
 | C01 | `AppShell` | todas las rutas protegidas | **Carcasa lista**: Navbar + `<Outlet/>` en `max-w-5xl`, envuelve las rutas desde `ProtectedRoute` (Semana 4); falta el wireframe final de layout por rol |
 | C02 | `Navbar` | todas | **Carcasa lista**: logo, links según rol (§5 del inventario), nombre + `RoleBadge` + botón Salir; barra superior en los 3 roles, falta el wireframe final |
-| C08 | `ClienteDashboard` | `/cliente` | **Carcasa lista**: saludo con `user.name` del contexto + `EmptyState` con mensaje §3 y CTA "Nueva solicitud"; falta el diseño final |
-| C14 | `TecnicoDashboard` | `/tecnico` | **Carcasa lista**: saludo con contexto + `EmptyState` "Todavía no tenés trabajos." con CTA a Disponibles |
-| C19 | `AdminDashboard` | `/admin` | **Carcasa lista**: saludo con contexto + `EmptyState` de indicadores; los KPIs (D10) esperan diseño |
+| C08 | `ClienteDashboard` | `/cliente` | **Conectado**: saludo con `user.name` + listado de las últimas 3 solicitudes (`useSolicitudes`, con loading/error/empty) y CTA "Nueva solicitud"; falta el diseño final |
+| C09 | `SolicitudCard` | `/cliente/solicitudes` | **Conectado** (`components/solicitudes/SolicitudCard.jsx` + `ListaSolicitudes`): título, categoría, fecha, técnico y D1 por estado; falta la forma visual |
+| C10 | `SolicitudForm` | `/cliente/solicitudes/nueva` | **Conectado** (`pages/cliente/CrearSolicitud.jsx` → `POST /solicitudes`, toast y navigate); validación de campos obligatorios; falta la forma visual |
+| C14 | `TecnicoDashboard` | `/tecnico` | **Conectado**: "Mis trabajos" y "Disponibles ahora" desde `GET /solicitudes` (filtrado por rol), EmptyState cuando no hay nada |
+| C19 | `AdminDashboard` | `/admin` | **Conectado**: KPIs con D10 `ResumenCard` (total, pendientes, en proceso, finalizadas) desde `GET /solicitudes`; EmptyState cuando no hay datos; falta el diseño final |
+| D10 | `ResumenCard` | paneles | **Maquetado** (`components/ui/ResumenCard.jsx`): número + título con tokens; pendiente la forma visual |
 | C05 | `LoginForm` | `/login` | Conectado a `POST /auth/login` (Semana 3): redirect según el rol que devuelve la API, selector de perfil sólo en modo mock; pendiente estilo del Figma |
 | C06 | `RegisterForm` | `/registro` | Conectado a `POST /auth/register` (nombre, celular opcional, rol, password ≥ 8) con toast de éxito; pendiente estilo del Figma |
 | C13 | `PerfilCliente` | `/cliente/perfil` | Placeholders de datos, falta formulario real |
@@ -72,10 +73,11 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 
 ### Estado global (no es componente visual, pero está listo)
 
-- **`AuthContext`** (`src/context/AuthContext.jsx`): `user`, `role`, `status` (`idle`/`loading`/`error`/`authenticated`), `login`, `register`, `logout`. Persiste sesión en `localStorage` y la restaura al recargar. Mock activo hasta que el backend publique `/auth/*`.
+- **`AuthContext`** (`src/context/AuthContext.jsx`): `user`, `role`, `status` (`idle`/`loading`/`error`/`authenticated`), `login`, `register`, `logout`. Persiste sesión en `localStorage` y la restaura al recargar; `/` redirige a `/{rol}` cuando hay sesión activa. Mock activo hasta que el backend publique `/auth/*`.
 - **`ProtectedRoute`** (`src/components/auth/ProtectedRoute.jsx`): guard por rol; muestra `Spinner` mientras restaura sesión.
 - **Interceptor de axios** (`src/services/api.js`): adjunta el token a cada request y, ante un `401`, limpia la sesión y redirige a `/login` (`client.js` queda como alias).
 - **Adaptador de contrato** (`src/services/auth.js`): aplana `{ data: { usuario, token } }` del backend a `{ token, user }` y mapea `rol` → `role`, `nombre` → `name`.
+- **`useSolicitudes`** (`src/hooks/useSolicitudes.js` + `src/services/solicitudes.js`): `GET/POST /solicitudes` con estados `loading`/`ready`/`error` y `recargar()`; en modo mock guarda en `localStorage` (`urbanfix.mock.solicitudes`) para poder probar el flujo sin backend.
 
 ### Convenciones
 - Componentes en `frontend/src/components/<dominio>/`, páginas (rutables) en `frontend/src/pages/<perfil>/`, design system en `frontend/src/components/ui/`.
