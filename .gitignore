@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 *.log
+*.err
 
 backend/node_modules
 backend/.env
