@@ -52,7 +52,7 @@ Listados paginados:
 | Enum                | Valores                                                                      |
 |---------------------|------------------------------------------------------------------------------|
 | `Rol`               | `CLIENTE`, `TECNICO`, `ADMIN`                                                |
-| `EstadoSolicitud`   | `PENDIENTE`, `ACEPTADA`, `RECHAZADA`, `EN_PROCESO`, `FINALIZADA`, `CANCELADA` |
+| `EstadoSolicitud`   | `PENDIENTE`, `ACEPTADA`, `RECHAZADA` (deprecado, no se asigna en flujo de bolsa), `EN_PROCESO`, `FINALIZADA`, `CANCELADA` |
 | `CategoriaServicio` | `PLOMERIA`, `ELECTRICIDAD`, `GAS`, `CARPINTERIA`, `PINTURA`, `CERRAJERIA`, `ALBANILERIA`, `OTRO` |
 
 ## 3. Objetos
@@ -106,13 +106,15 @@ Listados paginados:
   "solicitudId": "uuid",
   "estadoAnterior": "PENDIENTE",
   "estadoNuevo": "ACEPTADA",
+  "accion": null,
   "cambiadoPor": { "id": "uuid", "nombre": "Carlos Gómez", "rol": "TECNICO" },
   "motivo": null,
   "fechaCambio": "2026-10-05T15:00:00.000Z"
 }
 ```
 
-`estadoAnterior` es `null` en el primer registro (creación).
+`estadoAnterior` es `null` en el primer registro (creación). `accion` es `"RECHAZO"` cuando un técnico rechaza una solicitud manteniendo su estado en `PENDIENTE`.
+
 
 ## 4. Autenticación
 
@@ -223,7 +225,7 @@ Lista según el rol:
 | Rol       | Ve                                                                      |
 |-----------|-------------------------------------------------------------------------|
 | `CLIENTE` | Solo sus solicitudes                                                    |
-| `TECNICO` | Solicitudes `PENDIENTE` (disponibles) y las asignadas a él              |
+| `TECNICO` | Solicitudes `PENDIENTE` (disponibles en bolsa, excluyendo las que ya haya rechazado) y las asignadas a él |
 | `ADMIN`   | Todas                                                                   |
 
 Query params (todos opcionales): `estado`, `categoria`, `page` (def. 1), `limit` (def. 20, máx. 100).
@@ -236,7 +238,7 @@ Ordenadas por `fechaCreacion` descendente.
 
 ### GET `/solicitudes/:id` 🔒
 
-Detalle de una solicitud. Solo el cliente dueño, el técnico asignado (o cualquier técnico si está `PENDIENTE`) y el admin.
+Detalle de una solicitud. Solo el cliente dueño, el técnico asignado (o cualquier técnico si está `PENDIENTE` y no la ha rechazado previamente) y el admin. Si un técnico que la rechazó intenta acceder, recibe `403 FORBIDDEN`.
 
 Response `200`: `{ "data": { Solicitud } }`
 
@@ -254,23 +256,23 @@ Errores: `400`, `403`, `404`, `409` (ya no está `PENDIENTE`).
 
 ### GET `/solicitudes/:id/historial` 🔒
 
-Mismos permisos de visibilidad que el detalle.
+Mismos permisos de visibilidad que el detalle. Para usuarios con rol `CLIENTE`, los eventos de rechazo individual de técnicos no se exponen por privacidad.
 
 Response `200`: `{ "data": [HistorialEstado] }` ordenado por `fechaCambio` ascendente.
 
-## 8. Cambios de estado
+## 8. Cambios de estado y acciones
 
 Cada acción es un endpoint propio. Todas devuelven `200` con `{ "data": { Solicitud } }` actualizada, y registran una fila en el historial dentro de la misma transacción.
 
-| Endpoint                         | Quién                    | Transición                       | Body                          | Efecto en datos                        |
+| Endpoint                         | Quién                    | Transición / Acción              | Body                          | Efecto en datos                        |
 |----------------------------------|--------------------------|----------------------------------|-------------------------------|----------------------------------------|
-| `PATCH /solicitudes/:id/aceptar`  | TECNICO                  | `PENDIENTE` → `ACEPTADA`        | vacío                         | `tecnicoId` = usuario, `fechaAceptacion` |
-| `PATCH /solicitudes/:id/rechazar` | TECNICO                  | `PENDIENTE` → `RECHAZADA`       | `{ "motivo": "..." }` (obl.)  | Historial con motivo                   |
+| `PATCH /solicitudes/:id/aceptar`  | TECNICO                  | `PENDIENTE` → `ACEPTADA`        | vacío                         | `tecnicoId` = usuario, `fechaAceptacion`. Bloqueado (`409`) si el técnico ya la había rechazado. |
+| `PATCH /solicitudes/:id/rechazar` | TECNICO                  | `PENDIENTE` → `PENDIENTE` (rechazo) | `{ "motivo": "..." }` (obl.)  | Registra `RechazoSolicitud`, historial con `accion: "RECHAZO"` y motivo. La solicitud permanece `PENDIENTE` para otros técnicos. Bloqueado (`409`) si ya la rechazó previamente. |
 | `PATCH /solicitudes/:id/iniciar`  | TECNICO asignado         | `ACEPTADA` → `EN_PROCESO`       | vacío                         | `fechaInicio`                          |
 | `PATCH /solicitudes/:id/finalizar`| TECNICO asignado         | `EN_PROCESO` → `FINALIZADA`     | vacío                         | `fechaFinalizacion`                    |
 | `PATCH /solicitudes/:id/cancelar` | CLIENTE dueño o ADMIN    | `PENDIENTE`/`ACEPTADA` → `CANCELADA` | `{ "motivo": "..." }` (obl.) | `fechaCancelacion`, `motivoCancelacion` |
 
-Errores comunes: `400` (falta `motivo`), `403` (rol o usuario sin permiso), `404`, `409` (transición no permitida desde el estado actual).
+Errores comunes: `400` (falta `motivo`), `403` (rol o usuario sin permiso), `404`, `409` (transición no permitida desde el estado actual, rechazo duplicado o intento de aceptar una solicitud rechazada).
 
 Ejemplo de error de transición:
 
@@ -286,7 +288,8 @@ Ejemplo de error de transición:
 ## 9. Decisiones abiertas (a confirmar con el equipo)
 
 1. **Asignación:** se asumió un modelo de "bolsa" donde cualquier técnico ve las `PENDIENTE` y la primera en aceptar se la queda. Si el cliente elige al técnico, hay que agregar `tecnicoId` al crear y un `GET /tecnicos`.
-2. **Rechazo:** con este modelo, `RECHAZADA` es un estado final para toda la solicitud. Si se quiere que otro técnico pueda tomarla después, habría que dejarla en `PENDIENTE` y registrar solo el rechazo en el historial.
+2. **Rechazo :** Con el modelo de bolsa, el rechazo de un técnico mantiene la solicitud en `PENDIENTE`, registrando el rechazo individual en `RechazoSolicitud` e `HistorialEstadoSolicitud`. El técnico que rechazó no vuelve a verla ni puede aceptarla, pero queda disponible para que otro técnico la tome.
 3. **Cancelar en `EN_PROCESO`:** hoy no está permitido. Confirmar si debe permitirse.
 4. **Token:** falta agregar `jsonwebtoken` a las dependencias del backend.
 5. **Validación:** definir librería (por ejemplo `zod`) para los `VALIDATION_ERROR`.
+
