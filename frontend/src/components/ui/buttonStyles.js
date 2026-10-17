@@ -9,6 +9,8 @@ export const BUTTON_FOCUS =
 
 export const VARIANTS = {
   primary: 'bg-primary text-white hover:bg-primary-hover disabled:bg-primary/40',
+  'primary-outline':
+    'border border-primary bg-surface text-primary hover:bg-primary/5 disabled:text-primary/40 disabled:border-primary/40',
   secondary:
     'border border-border-input bg-surface text-text hover:bg-bg disabled:text-text-muted/50',
   danger: 'bg-error text-white hover:brightness-90 disabled:bg-error/40',

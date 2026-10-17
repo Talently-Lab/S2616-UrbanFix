@@ -1,9 +1,14 @@
-// Mensajes de estado vacío — §3 del inventario de componentes de UX/UI.
-// Cada lista los usa a través de <EmptyState title={...}>.
-
 export const MENSAJES_VACIOS = {
   clienteSolicitudes: 'Todavía no creaste ninguna solicitud.',
   tecnicoDisponibles: 'Por ahora no hay trabajos disponibles.',
   tecnicoTrabajos: 'Todavía no tenés trabajos.',
   adminSolicitudes: 'No hay solicitudes con estos filtros.',
+}
+
+export const DESCRIPCIONES_VACIOS = {
+  clienteSolicitudes: 'Cuando pidas un servicio, lo vas a ver acá con su estado.',
+  tecnicoDisponibles:
+    'Volvé en un rato: cuando un cliente publique una solicitud, la vas a ver acá.',
+  tecnicoTrabajos: 'Cuando aceptes un trabajo lo vas a ver acá con su estado.',
+  filtrados: 'Limpiá los filtros para ver todas.',
 }

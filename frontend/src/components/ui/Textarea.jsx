@@ -3,7 +3,7 @@ import { useId } from 'react'
 const FIELD =
   'w-full rounded-field border bg-surface px-3 py-2 text-base text-text placeholder:text-text-muted/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-bg disabled:text-text-muted'
 
-export default function Textarea({ label, error, id, rows = 4, className = '', ...props }) {
+export default function Textarea({ label, hint, error, id, rows = 4, className = '', ...props }) {
   const generatedId = useId()
   const textareaId = id ?? generatedId
   const border = error ? 'border-error' : 'border-border-input'
@@ -21,6 +21,7 @@ export default function Textarea({ label, error, id, rows = 4, className = '', .
       <textarea
         id={textareaId}
         rows={rows}
+        aria-invalid={Boolean(error)}
         className={`${FIELD} ${border} ${className}`}
         {...props}
       />
@@ -31,7 +32,11 @@ export default function Textarea({ label, error, id, rows = 4, className = '', .
         </span>
       ) : null}
 
-      {error ? <span className="text-xs text-error">{error}</span> : null}
+      {error ? (
+        <span className="text-xs text-error">{error}</span>
+      ) : hint ? (
+        <span className="text-xs text-text-muted">{hint}</span>
+      ) : null}
     </div>
   )
 }

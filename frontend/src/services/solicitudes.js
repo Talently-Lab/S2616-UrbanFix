@@ -40,7 +40,11 @@ function filtrarPorRol(lista, user) {
     return lista.filter((s) => s.clienteEmail === user.email)
   }
   if (user?.role === 'tecnico') {
-    return lista.filter((s) => s.estado === 'PENDIENTE' || s.tecnicoEmail === user.email)
+    return lista.filter(
+      (s) =>
+        (s.estado === 'PENDIENTE' && !(s.rechazos ?? []).includes(user.email)) ||
+        s.tecnicoEmail === user.email,
+    )
   }
   return lista
 }
@@ -89,6 +93,7 @@ export async function crear(payload) {
       clienteEmail: user?.email ?? null,
       tecnicoId: null,
       tecnicoEmail: null,
+      rechazos: [],
       cliente: user ? { id: user.id, nombre: user.name, celular: user.celular ?? null } : null,
       tecnico: null,
       fechaCreacion: ahora,
@@ -108,5 +113,69 @@ export async function crear(payload) {
     return data.data
   } catch (err) {
     throw new Error(extractErrorMessage(err, 'No se pudo crear la solicitud'))
+  }
+}
+
+export async function aceptar(id) {
+  if (isMockAuth()) {
+    await delay(400)
+    const user = readStoredSession()?.user ?? null
+    const lista = readMockStore()
+    const solicitud = lista.find((s) => s.id === id)
+    if (!solicitud) throw new Error('La solicitud ya no está disponible')
+    if (solicitud.estado !== 'PENDIENTE') throw new Error('La solicitud ya fue tomada')
+    if ((solicitud.rechazos ?? []).includes(user?.email)) {
+      throw new Error('Ya rechazaste esta solicitud')
+    }
+
+    const actualizada = {
+      ...solicitud,
+      estado: 'ACEPTADA',
+      tecnicoId: user?.id ?? null,
+      tecnicoEmail: user?.email ?? null,
+      tecnico: user
+        ? { id: user.id, nombre: user.name, celular: user.celular ?? null }
+        : null,
+      fechaAceptacion: new Date().toISOString(),
+      fechaActualizacion: new Date().toISOString(),
+    }
+    writeMockStore(lista.map((s) => (s.id === id ? actualizada : s)))
+    return actualizada
+  }
+
+  try {
+    const { data } = await api.patch(`/solicitudes/${id}/aceptar`)
+    return data.data
+  } catch (err) {
+    throw new Error(extractErrorMessage(err, 'No se pudo aceptar la solicitud'))
+  }
+}
+
+export async function rechazar(id, motivo) {
+  const motivoLimpio = motivo?.trim() ?? ''
+  if (!motivoLimpio) throw new Error('El motivo es obligatorio')
+
+  if (isMockAuth()) {
+    await delay(400)
+    const user = readStoredSession()?.user ?? null
+    const lista = readMockStore()
+    const solicitud = lista.find((s) => s.id === id)
+    if (!solicitud) throw new Error('La solicitud ya no está disponible')
+    if (solicitud.estado !== 'PENDIENTE') throw new Error('La solicitud ya no está disponible')
+
+    const actualizada = {
+      ...solicitud,
+      rechazos: [...(solicitud.rechazos ?? []), user?.email ?? ''],
+      fechaActualizacion: new Date().toISOString(),
+    }
+    writeMockStore(lista.map((s) => (s.id === id ? actualizada : s)))
+    return actualizada
+  }
+
+  try {
+    const { data } = await api.patch(`/solicitudes/${id}/rechazar`, { motivo: motivoLimpio })
+    return data.data
+  } catch (err) {
+    throw new Error(extractErrorMessage(err, 'No se pudo rechazar la solicitud'))
   }
 }

@@ -43,11 +43,14 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 | # | Componente | Ruta / uso | Notas |
 |---|-------------|-----------|-------|
 | C01 | `AppShell` | todas las rutas protegidas | **Carcasa lista**: Navbar + `<Outlet/>` en `max-w-5xl`, envuelve las rutas desde `ProtectedRoute` (Semana 4); falta el wireframe final de layout por rol |
-| C02 | `Navbar` | todas | **Carcasa lista**: logo, links según rol (§5 del inventario), nombre + `RoleBadge` + botón Salir; barra superior en los 3 roles, falta el wireframe final |
+| C02 | `Navbar` | todas | **Diseño aplicado**: logo "UrbanFix" + menú "Nombre ▾" (dropdown con nombre, email y `RoleBadge`, links por rol y Salir; cierra con Esc, click fuera y al navegar) |
 | C08 | `ClienteDashboard` | `/cliente` | **Conectado**: saludo con `user.name` + listado de las últimas 3 solicitudes (`useSolicitudes`, con loading/error/empty) y CTA "Nueva solicitud"; falta el diseño final |
-| C09 | `SolicitudCard` | `/cliente/solicitudes` | **Conectado** (`components/solicitudes/SolicitudCard.jsx` + `ListaSolicitudes`): título, categoría, fecha, técnico y D1 por estado; falta la forma visual |
-| C10 | `SolicitudForm` | `/cliente/solicitudes/nueva` | **Conectado** (`pages/cliente/CrearSolicitud.jsx` → `POST /solicitudes`, toast y navigate); validación de campos obligatorios; falta la forma visual |
+| C09 | `SolicitudCard` | `/cliente/solicitudes`, `/tecnico/*` | **Diseño aplicado** (D2, `components/solicitudes/SolicitudCard.jsx`): categoría en mayúsculas + D1 arriba a la derecha, título `text-lg`, meta "dirección · Creada el dd/mm" o "· Publicada hace X min" (`momento`), `acciones` opcionales (D3: Aceptar / Rechazar con variante `primary-outline`); `ListaSolicitudes` acepta `acciones` |
+| C10 | `SolicitudForm` | `/cliente/solicitudes/nueva` | **Diseño aplicado** (`pages/cliente/CrearSolicitud.jsx`): orden del diseño (Título, Categoría, Descripción, Dirección), hint de Título, errores por campo con copy del diseño, botón "Enviar solicitud" full width; conectado a `POST /solicitudes` con toast y navigate |
 | C14 | `TecnicoDashboard` | `/tecnico` | **Conectado**: "Mis trabajos" y "Disponibles ahora" desde `GET /solicitudes` (filtrado por rol), EmptyState cuando no hay nada |
+| — | `ClienteSolicitudes` | `/cliente/solicitudes` | **Diseño aplicado**: chips de estado (D8), listado D2, empty state con copy del diseño y CTA "Nueva solicitud" full width; filtros client-side sobre `GET /solicitudes` |
+| — | `TecnicoDisponibles` | `/tecnico/disponibles` | **Diseño aplicado** (D3): chips de categoría, solo `PENDIENTE`, Aceptar (`PATCH /:id/aceptar`) y Rechazar con modal de motivo (D7, `PATCH /:id/rechazar`); meta "Publicada hace X min" |
+| — | `TecnicoTrabajos` | `/tecnico/trabajos` | **Diseño aplicado** (D4): mis solicitudes con chips En proceso / Finalizadas; sin diseño de captura — mismo estilo de listado |
 | C19 | `AdminDashboard` | `/admin` | **Conectado**: KPIs con D10 `ResumenCard` (total, pendientes, en proceso, finalizadas) desde `GET /solicitudes`; EmptyState cuando no hay datos; falta el diseño final |
 | D10 | `ResumenCard` | paneles | **Maquetado** (`components/ui/ResumenCard.jsx`): número + título con tokens; pendiente la forma visual |
 | C05 | `LoginForm` | `/login` | **Diseño aplicado** (capturas de UX/UI): logo, título + subtítulo, banner de error con ícono, errores por campo ("Revisá que esté bien escrito." / "Revisá tu contraseña.") y cargando "Ingresando…"; conectado a `POST /auth/login` con redirect según rol, selector de perfil sólo en modo mock |
@@ -66,10 +69,11 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 | C25 | `Input` / `Select` / `Textarea` | `label`, `error`, `hint`, `required`; `options` en Select; `maxLength` en Textarea | `error`: borde + mensaje; `hint`: mensaje auxiliar (no se muestra si hay error); mostrar/ocultar contraseña; contador de caracteres |
 | C26 | `Modal` | `open`, `onClose`, `title`, `footer` | cerrado (`null`); Esc y click fuera cierran |
 | C27 | `Spinner` | `size` (sm/md/lg), `tone` (default/invert) | `invert`: para fondos con color (botones primario/peligro) |
-| C28 | `EmptyState` | `title`, `description`, `action` | empty state (mensajes en `constants/mensajesVacios.js`) |
+| C28 | `EmptyState` | `icon` (emoji), `title`, `description`, `action` | **Diseño aplicado**: sin borde dashed, ícono arriba, título `text-lg font-bold`, acción centrada (full width en `max-w-sm` si el botón lo pide) |
 | C29 | `ErrorAlert` | `message`, `onRetry` | error state con ícono de advertencia (+ botón reintentar) |
 | C30 | `Toast` | `useToast().show(message, type)` | info/success/error; auto-cierra a los 4s |
 | — | `SegmentedControl` | `label`, `options`, `value`, `onChange` | dos opciones tipo radio: la elegida con borde primary, fondo suave y punto lleno (registro: "Quiero") |
+| — | `FilterChips` (D8) | `options` (`{value,label}`), `value`, `onChange`, `label` | chips full-width con scroll horizontal; activo: fondo primary y texto blanco, redondeado completo |
 | — | `AuthLayout` | `title`, `subtitle`, `children` | carcasa de pantallas públicas: logo UrbanFix + título + subtítulo (Login y Registro) |
 | D1 | `EstadoSolicitudBadge` | `estado` (6 estados) | ícono + texto + color por estado |
 
@@ -79,7 +83,7 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 - **`ProtectedRoute`** (`src/components/auth/ProtectedRoute.jsx`): guard por rol; muestra `Spinner` mientras restaura sesión.
 - **Interceptor de axios** (`src/services/api.js`): adjunta el token a cada request y, ante un `401`, limpia la sesión y redirige a `/login` (`client.js` queda como alias).
 - **Adaptador de contrato** (`src/services/auth.js`): aplana `{ data: { usuario, token } }` del backend a `{ token, user }` y mapea `rol` → `role`, `nombre` → `name`.
-- **`useSolicitudes`** (`src/hooks/useSolicitudes.js` + `src/services/solicitudes.js`): `GET/POST /solicitudes` con estados `loading`/`ready`/`error` y `recargar()`; en modo mock guarda en `localStorage` (`urbanfix.mock.solicitudes`) para poder probar el flujo sin backend.
+- **`useSolicitudes`** (`src/hooks/useSolicitudes.js` + `src/services/solicitudes.js`): `GET/POST /solicitudes` + acciones del técnico (`aceptar` → `PATCH /:id/aceptar`, `rechazar` → `PATCH /:id/rechazar` con `{ motivo }`) con estados `loading`/`ready`/`error` y `recargar()`; en modo mock guarda en `localStorage` (`urbanfix.mock.solicitudes`) con rechazos por técnico para poder probar el flujo sin backend.
 
 ### Convenciones
 - Componentes en `frontend/src/components/<dominio>/`, páginas (rutables) en `frontend/src/pages/<perfil>/`, design system en `frontend/src/components/ui/`.
@@ -92,4 +96,4 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 ## 🎨 Pendientes de diseño
 
 > El detalle del seguimiento de diseño vive en [data/07-pendientes-de-diseno.md](./data/07-pendientes-de-diseno.md)
-> (insumos UX/UI, qué está ✅ y qué falta: prototipo de pantallas públicas, layout por rol C01–C03 y D2–D10).
+> (insumos UX/UI, qué está ✅ y qué falta: Home, dashboards, detalle de solicitud, tablas admin D5, timeline D6, paginación D9 y layout C03).

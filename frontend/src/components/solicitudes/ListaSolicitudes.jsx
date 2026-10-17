@@ -1,15 +1,21 @@
 import SolicitudCard from './SolicitudCard'
 
-// Listado vertical de SolicitudCard. `detalle` es el prefijo de la ruta de
-// detalle (por ejemplo /cliente/solicitudes); sin prefijo las cards no son links.
-export default function ListaSolicitudes({ solicitudes, detalle, className = '' }) {
+export default function ListaSolicitudes({
+  solicitudes,
+  detalle,
+  momento = 'fecha',
+  acciones,
+  className = '',
+}) {
   return (
-    <ul className={`flex flex-col gap-3 ${className}`}>
+    <ul className={`flex flex-col gap-4 ${className}`}>
       {solicitudes.map((solicitud) => (
         <li key={solicitud.id}>
           <SolicitudCard
             solicitud={solicitud}
             to={detalle ? `${detalle}/${solicitud.id}` : undefined}
+            momento={momento}
+            acciones={acciones ? acciones(solicitud) : null}
           />
         </li>
       ))}
