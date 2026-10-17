@@ -30,28 +30,14 @@ export const update = async (req, res, next) => {
 
 export const aceptar = async (req, res, next) => {
   try {
-    const solicitud = await solicitudService.cambiarEstado({
-      id: req.params.id,
-      user: req.user,
-      estadoEsperado: 'PENDIENTE',
-      nuevoEstado: 'ACEPTADA',
-      accion: 'aceptar',
-      datosActualizar: { tecnicoId: req.user.id, fechaAceptacion: new Date() }
-    });
+    const solicitud = await solicitudService.aceptarSolicitud(req.params.id, req.user);
     res.status(200).json({ data: solicitud });
   } catch (err) { next(err); }
 };
 
 export const rechazar = async (req, res, next) => {
   try {
-    const solicitud = await solicitudService.cambiarEstado({
-      id: req.params.id,
-      user: req.user,
-      estadoEsperado: 'PENDIENTE',
-      nuevoEstado: 'RECHAZADA',
-      motivo: req.body.motivo,
-      accion: 'rechazar'
-    });
+    const solicitud = await solicitudService.rechazarSolicitud(req.params.id, req.user, req.body.motivo);
     res.status(200).json({ data: solicitud });
   } catch (err) { next(err); }
 };

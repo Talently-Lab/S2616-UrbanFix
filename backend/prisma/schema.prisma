@@ -26,7 +26,7 @@ enum CategoriaServicio {
 enum EstadoSolicitud {
   PENDIENTE // Creada por el cliente, esperando asignación/respuesta
   ACEPTADA // Técnico aceptó el trabajo
-  RECHAZADA // Técnico rechazó el trabajo
+  RECHAZADA // No se utiliza en el modelo de bolsa (el rechazo mantiene la solicitud en PENDIENTE)
   EN_PROCESO // Trabajo en ejecución
   FINALIZADA // Trabajo completado
   CANCELADA // Cancelada por el cliente o admin
@@ -39,7 +39,6 @@ model Usuario {
   nombre             String
   celular            String? // opcional
   rol                Rol      @default(CLIENTE)
-  lastLogin          DateTime? //ultimo login exitoso; null = nunca inicio sesion
   fechaCreacion      DateTime @default(now())
   fechaActualizacion DateTime @updatedAt
 
@@ -47,6 +46,7 @@ model Usuario {
   solicitudesComoCliente SolicitudServicio[]        @relation("SolicitudesComoCliente")
   solicitudesComoTecnico SolicitudServicio[]        @relation("SolicitudesComoTecnico")
   cambiosDeEstado        HistorialEstadoSolicitud[] @relation("CambiosDeEstado")
+  rechazos               RechazoSolicitud[]         @relation("RechazosTecnico")
 }
 
 model HistorialEstadoSolicitud {
@@ -57,6 +57,7 @@ model HistorialEstadoSolicitud {
 
   estadoAnterior EstadoSolicitud? // null en el primer registro
   estadoNuevo    EstadoSolicitud
+  accion         String? // Ej: "RECHAZO", null para cambios de estado estándar
 
   cambiadoPorId String
   cambiadoPor   Usuario @relation("CambiosDeEstado", fields: [cambiadoPorId], references: [id])
@@ -92,8 +93,24 @@ model SolicitudServicio {
   motivoCancelacion String?
 
   historialEstados HistorialEstadoSolicitud[]
+  rechazos         RechazoSolicitud[]
 
   @@index([clienteId])
   @@index([tecnicoId])
   @@index([estado])
 }
+
+model RechazoSolicitud {
+  id           String            @id @default(uuid())
+  solicitudId  String
+  solicitud    SolicitudServicio @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+  tecnicoId    String
+  tecnico      Usuario           @relation("RechazosTecnico", fields: [tecnicoId], references: [id], onDelete: Restrict)
+  motivo       String
+  fechaRechazo DateTime          @default(now())
+
+  @@unique([solicitudId, tecnicoId])
+  @@index([solicitudId])
+  @@index([tecnicoId])
+}
+
