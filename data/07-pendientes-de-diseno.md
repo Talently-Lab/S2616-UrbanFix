@@ -15,7 +15,7 @@ Insumos de UX/UI. Lo resuelto queda marcado con ✅; lo que falta sigue bloquean
 
 - ✅ **Tokens de diseño**: sistema de diseño base recibido → [05-sistema-de-diseno-base.md](./05-sistema-de-diseno-base.md) y **ya aplicado** en `frontend/src/index.css` (`@theme`) + componentes de `components/ui`.
 - ✅ **Estados de solicitud y sus colores**: mapping de los 6 estados aplicado en `EstadoSolicitudBadge` (D1).
-- **Prototipo de pantallas públicas**: maquetado real de Home, Login y Registro (con tokens ya aplicados, falta el estilo final del Figma).
+- **Prototipo de pantallas públicas**: ✅ **Login y Registro maquetados con las capturas finales de UX/UI** (copy, toggle "Quiero", hints, errores por campo, banner con ícono y estados cargando → `frontend/src/pages/public/Login.jsx` y `Register.jsx`, carcasa en `components/auth/AuthLayout.jsx`); falta el diseño final de **Home**.
 - **Layout de pantallas protegidas**: dónde va el navbar/sidebar por rol (C01–C03) — pendiente de wireframes (§5 del inventario).
 - **Componentes de dominio D2–D10**: `SolicitudCard`, `TrabajoDisponibleCard`, tablas de admin, timeline, filtros, paginación y `ResumenCard` — sé qué datos muestran (§2 del inventario), falta la forma visual.
 

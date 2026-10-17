@@ -50,8 +50,8 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 | C14 | `TecnicoDashboard` | `/tecnico` | **Conectado**: "Mis trabajos" y "Disponibles ahora" desde `GET /solicitudes` (filtrado por rol), EmptyState cuando no hay nada |
 | C19 | `AdminDashboard` | `/admin` | **Conectado**: KPIs con D10 `ResumenCard` (total, pendientes, en proceso, finalizadas) desde `GET /solicitudes`; EmptyState cuando no hay datos; falta el diseño final |
 | D10 | `ResumenCard` | paneles | **Maquetado** (`components/ui/ResumenCard.jsx`): número + título con tokens; pendiente la forma visual |
-| C05 | `LoginForm` | `/login` | Conectado a `POST /auth/login` (Semana 3): redirect según el rol que devuelve la API, selector de perfil sólo en modo mock; pendiente estilo del Figma |
-| C06 | `RegisterForm` | `/registro` | Conectado a `POST /auth/register` (nombre, celular opcional, rol, password ≥ 8) con toast de éxito; pendiente estilo del Figma |
+| C05 | `LoginForm` | `/login` | **Diseño aplicado** (capturas de UX/UI): logo, título + subtítulo, banner de error con ícono, errores por campo ("Revisá que esté bien escrito." / "Revisá tu contraseña.") y cargando "Ingresando…"; conectado a `POST /auth/login` con redirect según rol, selector de perfil sólo en modo mock |
+| C06 | `RegisterForm` | `/registro` | **Diseño aplicado**: selector segmentado "Quiero" (Pedir un servicio / Soy técnico), orden de campos del diseño, hints de celular y contraseña, errores por campo (email duplicado → 409, contraseña < 8) y cargando "Creando cuenta…"; conectado a `POST /auth/register` con toast de éxito |
 | C13 | `PerfilCliente` | `/cliente/perfil` | Placeholders de datos, falta formulario real |
 
 ## Listo
@@ -62,13 +62,15 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 | # | Componente | Props | Estados |
 |---|-------------|-------|---------|
 | C07 | `RoleBadge` | `role` (cliente/tecnico/admin) | etiqueta capitalizada |
-| C24 | `Button` / `ButtonLink` | `variant` (primary/secondary/danger/ghost), `loading`, `disabled`, `type` · `to` en ButtonLink | `loading`: spinner + deshabilitado |
-| C25 | `Input` / `Select` / `Textarea` | `label`, `error`, `required`; `options` en Select; `maxLength` en Textarea | `error`: borde + mensaje; mostrar/ocultar contraseña; contador de caracteres |
+| C24 | `Button` / `ButtonLink` | `variant` (primary/secondary/danger/ghost), `loading`, `disabled`, `type` · `to` en ButtonLink | `loading`: spinner (blanco en variantes con fondo sólido) + deshabilitado |
+| C25 | `Input` / `Select` / `Textarea` | `label`, `error`, `hint`, `required`; `options` en Select; `maxLength` en Textarea | `error`: borde + mensaje; `hint`: mensaje auxiliar (no se muestra si hay error); mostrar/ocultar contraseña; contador de caracteres |
 | C26 | `Modal` | `open`, `onClose`, `title`, `footer` | cerrado (`null`); Esc y click fuera cierran |
-| C27 | `Spinner` | `size` (sm/md/lg) | — |
+| C27 | `Spinner` | `size` (sm/md/lg), `tone` (default/invert) | `invert`: para fondos con color (botones primario/peligro) |
 | C28 | `EmptyState` | `title`, `description`, `action` | empty state (mensajes en `constants/mensajesVacios.js`) |
-| C29 | `ErrorAlert` | `message`, `onRetry` | error state (+ botón reintentar) |
+| C29 | `ErrorAlert` | `message`, `onRetry` | error state con ícono de advertencia (+ botón reintentar) |
 | C30 | `Toast` | `useToast().show(message, type)` | info/success/error; auto-cierra a los 4s |
+| — | `SegmentedControl` | `label`, `options`, `value`, `onChange` | dos opciones tipo radio: la elegida con borde primary, fondo suave y punto lleno (registro: "Quiero") |
+| — | `AuthLayout` | `title`, `subtitle`, `children` | carcasa de pantallas públicas: logo UrbanFix + título + subtítulo (Login y Registro) |
 | D1 | `EstadoSolicitudBadge` | `estado` (6 estados) | ícono + texto + color por estado |
 
 ### Estado global (no es componente visual, pero está listo)

@@ -33,7 +33,13 @@ api.interceptors.response.use(
 )
 
 export function extractErrorMessage(error, fallback = 'Ocurrió un error inesperado') {
-  return error?.response?.data?.error?.message ?? error?.message ?? fallback
+  if (error?.response) {
+    return error.response.data?.error?.message ?? error.message ?? fallback
+  }
+  if (error?.request) {
+    return fallback
+  }
+  return error?.message ?? fallback
 }
 
 export default api

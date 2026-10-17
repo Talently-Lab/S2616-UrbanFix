@@ -14,3 +14,8 @@ export const VARIANTS = {
   danger: 'bg-error text-white hover:brightness-90 disabled:bg-error/40',
   ghost: 'text-text-muted hover:bg-border/50 disabled:text-text-muted/50',
 }
+
+export const LOADING_VARIANTS = {
+  primary: 'bg-primary text-white',
+  danger: 'bg-error text-white',
+}

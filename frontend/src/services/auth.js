@@ -2,6 +2,7 @@ import api, { extractErrorMessage } from './api'
 
 const MOCK_ENABLED = import.meta.env.VITE_MOCK_AUTH !== 'false'
 const STORAGE_KEY = 'urbanfix.session'
+const MOCK_USERS_KEY = 'urbanfix.mock.users'
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -13,6 +14,16 @@ function readStoredSession() {
     return raw ? JSON.parse(raw) : null
   } catch {
     return null
+  }
+}
+
+function readMockEmails() {
+  try {
+    const raw = window.localStorage.getItem(MOCK_USERS_KEY)
+    const parsed = raw ? JSON.parse(raw) : []
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
   }
 }
 
@@ -34,6 +45,13 @@ function toSession(payload) {
   }
 }
 
+function toApiError(err, fallback) {
+  const error = new Error(extractErrorMessage(err, fallback))
+  error.status = err?.response?.status ?? null
+  error.details = err?.response?.data?.error?.details ?? null
+  return error
+}
+
 export async function login({ email, password, role }) {
   if (MOCK_ENABLED) {
     await delay(400)
@@ -50,7 +68,7 @@ export async function login({ email, password, role }) {
     const { data } = await api.post('/auth/login', { email, password })
     return toSession(data.data)
   } catch (err) {
-    throw new Error(extractErrorMessage(err, 'No se pudo iniciar sesión'))
+    throw toApiError(err, 'No se pudo iniciar sesión')
   }
 }
 
@@ -63,6 +81,11 @@ export async function register(payload) {
     if (!payload.password || payload.password.length < 8) {
       throw new Error('La contraseña debe tener al menos 8 caracteres')
     }
+    const emails = readMockEmails()
+    if (emails.includes(payload.email)) {
+      throw new Error('Email ya registrado')
+    }
+    window.localStorage.setItem(MOCK_USERS_KEY, JSON.stringify([...emails, payload.email]))
     return {
       token: 'mock-token',
       user: normalizeUser({ email: payload.email, nombre: payload.name, rol: payload.role }),
@@ -80,7 +103,7 @@ export async function register(payload) {
     const { data } = await api.post('/auth/register', body)
     return toSession(data.data)
   } catch (err) {
-    throw new Error(extractErrorMessage(err, 'No se pudo crear la cuenta'))
+    throw toApiError(err, 'No se pudo crear la cuenta')
   }
 }
 
