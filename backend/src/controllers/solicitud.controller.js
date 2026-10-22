@@ -35,6 +35,21 @@ export const aceptar = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+/**
+ * Rechaza o libera una solicitud desde la perspectiva de un técnico.
+ *
+ * - Solicitud `PENDIENTE`: registra el rechazo individual (RechazoSolicitud) y
+ *   la deja disponible en la bolsa para otros técnicos.
+ * - Solicitud `ACEPTADA` asignada al usuario: libera el trabajo, removiendo al
+ *   técnico asignado y devolviendo la solicitud a `PENDIENTE`.
+ *
+ * @param {import('express').Request} req - Petición autenticada; `req.params.id`
+ *   contiene el UUID de la solicitud, `req.user` el técnico y `req.body.motivo`
+ *   el motivo obligatorio.
+ * @param {import('express').Response} res - Devuelve `200` con `{ data: Solicitud }`.
+ * @param {import('express').NextFunction} next - Propaga errores al middleware.
+ * @returns {Promise<void>}
+ */
 export const rechazar = async (req, res, next) => {
   try {
     const solicitud = await solicitudService.rechazarSolicitud(req.params.id, req.user, req.body.motivo);

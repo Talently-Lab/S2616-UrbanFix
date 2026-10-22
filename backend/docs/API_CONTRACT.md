@@ -113,7 +113,7 @@ Listados paginados:
 }
 ```
 
-`estadoAnterior` es `null` en el primer registro (creación). `accion` es `"RECHAZO"` cuando un técnico rechaza una solicitud manteniendo su estado en `PENDIENTE`.
+`estadoAnterior` es `null` en el primer registro (creación). `accion` es `"RECHAZO"` cuando un técnico rechaza una solicitud manteniendo su estado en `PENDIENTE` y `"LIBERACION"` cuando el técnico asignado libera un trabajo `ACEPTADA`, devolviéndolo a `PENDIENTE`.
 
 
 ## 4. Autenticación
@@ -267,7 +267,7 @@ Cada acción es un endpoint propio. Todas devuelven `200` con `{ "data": { Solic
 | Endpoint                         | Quién                    | Transición / Acción              | Body                          | Efecto en datos                        |
 |----------------------------------|--------------------------|----------------------------------|-------------------------------|----------------------------------------|
 | `PATCH /solicitudes/:id/aceptar`  | TECNICO                  | `PENDIENTE` → `ACEPTADA`        | vacío                         | `tecnicoId` = usuario, `fechaAceptacion`. Bloqueado (`409`) si el técnico ya la había rechazado. |
-| `PATCH /solicitudes/:id/rechazar` | TECNICO                  | `PENDIENTE` → `PENDIENTE` (rechazo) | `{ "motivo": "..." }` (obl.)  | Registra `RechazoSolicitud`, historial con `accion: "RECHAZO"` y motivo. La solicitud permanece `PENDIENTE` para otros técnicos. Bloqueado (`409`) si ya la rechazó previamente. |
+| `PATCH /solicitudes/:id/rechazar` | TECNICO                  | `PENDIENTE` → `PENDIENTE` (rechazo) o `ACEPTADA` → `PENDIENTE` (liberación) | `{ "motivo": "..." }` (obl.)  | Si está `PENDIENTE`, registra `RechazoSolicitud`, historial con `accion: "RECHAZO"` y motivo, y permanece `PENDIENTE` para otros técnicos. Si está `ACEPTADA`, solo el técnico asignado puede liberarla: remueve `tecnicoId`, limpia `fechaAceptacion`, vuelve a `PENDIENTE` e historial con `accion: "LIBERACION"`. |
 | `PATCH /solicitudes/:id/iniciar`  | TECNICO asignado         | `ACEPTADA` → `EN_PROCESO`       | vacío                         | `fechaInicio`                          |
 | `PATCH /solicitudes/:id/finalizar`| TECNICO asignado         | `EN_PROCESO` → `FINALIZADA`     | vacío                         | `fechaFinalizacion`                    |
 | `PATCH /solicitudes/:id/cancelar` | CLIENTE dueño o ADMIN    | `PENDIENTE`/`ACEPTADA` → `CANCELADA` | `{ "motivo": "..." }` (obl.) | `fechaCancelacion`, `motivoCancelacion` |
@@ -288,7 +288,7 @@ Ejemplo de error de transición:
 ## 9. Decisiones abiertas (a confirmar con el equipo)
 
 1. **Asignación:** se asumió un modelo de "bolsa" donde cualquier técnico ve las `PENDIENTE` y la primera en aceptar se la queda. Si el cliente elige al técnico, hay que agregar `tecnicoId` al crear y un `GET /tecnicos`.
-2. **Rechazo :** Con el modelo de bolsa, el rechazo de un técnico mantiene la solicitud en `PENDIENTE`, registrando el rechazo individual en `RechazoSolicitud` e `HistorialEstadoSolicitud`. El técnico que rechazó no vuelve a verla ni puede aceptarla, pero queda disponible para que otro técnico la tome.
+2. **Rechazo:** Con el modelo de bolsa, el rechazo de una solicitud `PENDIENTE` mantiene la solicitud en `PENDIENTE`, registrando el rechazo individual en `RechazoSolicitud` e `HistorialEstadoSolicitud`. El técnico que rechazó no vuelve a verla ni puede aceptarla, pero queda disponible para que otro técnico la tome. El mismo endpoint permite que el técnico asignado libere un trabajo `ACEPTADA`: la solicitud vuelve a `PENDIENTE`, se remueve `tecnicoId` y se registra `accion: "LIBERACION"` (sin crear `RechazoSolicitud`).
 3. **Cancelar en `EN_PROCESO`:** hoy no está permitido. Confirmar si debe permitirse.
 4. **Token:** falta agregar `jsonwebtoken` a las dependencias del backend.
 5. **Validación:** definir librería (por ejemplo `zod`) para los `VALIDATION_ERROR`.

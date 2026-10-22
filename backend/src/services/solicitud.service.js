@@ -229,6 +229,29 @@ export const aceptarSolicitud = async (id, user) => {
   });
 };
 
+/**
+ * Rechaza una solicitud de la bolsa o libera un trabajo ya asignado al técnico.
+ *
+ * Comportamiento según el estado actual de la solicitud:
+ * - `PENDIENTE`: registra un `RechazoSolicitud` para el técnico, agrega una fila
+ *   de historial con `accion: 'RECHAZO'` y mantiene la solicitud en `PENDIENTE`
+ *   para que otros técnicos puedan tomarla.
+ * - `ACEPTADA`: solo el técnico asignado puede liberarla. La solicitud vuelve a
+ *   `PENDIENTE`, se remueve `tecnicoId`, se limpia `fechaAceptacion` y se
+ *   registra el historial con `accion: 'LIBERACION'`.
+ *
+ * Ambos caminos se ejecutan en una transacción para mantener consistentes la
+ * solicitud, el historial y (cuando aplica) la tabla de rechazos.
+ *
+ * @param {string} id - UUID de la solicitud.
+ * @param {{ id: string, rol: string }} user - Técnico autenticado que ejecuta la acción.
+ * @param {string} motivo - Motivo obligatorio del rechazo o liberación.
+ * @returns {Promise<object>} Solicitud actualizada con el select público.
+ * @throws {Error} `404 NOT_FOUND` si la solicitud no existe.
+ * @throws {Error} `403 FORBIDDEN` si la solicitud no está asignada al técnico.
+ * @throws {Error} `409 CONFLICT` si el estado no permite rechazar/liberar o si
+ *   el técnico ya la había rechazado previamente.
+ */
 export const rechazarSolicitud = async (id, user, motivo) => {
   return await prisma.$transaction(async (tx) => {
     const solicitud = await tx.solicitudServicio.findUnique({ where: { id } });
@@ -237,6 +260,39 @@ export const rechazarSolicitud = async (id, user, motivo) => {
       error.status = 404;
       error.code = 'NOT_FOUND';
       throw error;
+    }
+
+    // Liberación de un trabajo ya asignado: ACEPTADA -> PENDIENTE sin técnico.
+    if (solicitud.estado === 'ACEPTADA') {
+      if (solicitud.tecnicoId !== user.id) {
+        const error = new Error('Solo el técnico asignado puede liberar esta solicitud');
+        error.status = 403;
+        error.code = 'FORBIDDEN';
+        throw error;
+      }
+
+      const updated = await tx.solicitudServicio.update({
+        where: { id },
+        data: {
+          estado: 'PENDIENTE',
+          tecnicoId: null,
+          fechaAceptacion: null
+        },
+        select: selectSolicitud
+      });
+
+      await tx.historialEstadoSolicitud.create({
+        data: {
+          solicitudId: id,
+          estadoAnterior: 'ACEPTADA',
+          estadoNuevo: 'PENDIENTE',
+          accion: 'LIBERACION',
+          cambiadoPorId: user.id,
+          motivo
+        }
+      });
+
+      return updated;
     }
 
     if (solicitud.estado !== 'PENDIENTE') {
