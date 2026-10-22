@@ -38,7 +38,7 @@ export default function AdminShell() {
         </div>
       </aside>
 
-      <main className="mx-auto w-full max-w-5xl px-8 py-8">
+      <main className="w-full px-10 py-8">
         <Outlet />
       </main>
     </div>

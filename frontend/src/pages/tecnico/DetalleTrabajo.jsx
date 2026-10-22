@@ -16,7 +16,7 @@ const BANNERS = {
 function fechaHora(iso) {
   const fecha = new Date(iso)
   const dia = fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })
-  const hora = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+  const hora = fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
   return `${dia} · ${hora}`
 }
 

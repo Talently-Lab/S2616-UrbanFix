@@ -3,7 +3,7 @@ import Spinner from '../ui/Spinner'
 import AppShell from '../layout/AppShell'
 import { useAuth } from '../../hooks/useAuth'
 
-export default function ProtectedRoute({ roles }) {
+export default function ProtectedRoute({ roles, shell = true }) {
   const { isAuthenticated, role, status } = useAuth()
   const location = useLocation()
 
@@ -21,6 +21,12 @@ export default function ProtectedRoute({ roles }) {
 
   if (roles && roles.length > 0 && !roles.includes(role)) {
     return <Navigate to="/acceso-denegado" replace />
+  }
+
+  // El admin tiene su propio shell (sidebar, AdminShell); no usa el AppShell
+  // con la Navbar superior.
+  if (!shell) {
+    return <Outlet />
   }
 
   return (
