@@ -113,7 +113,7 @@ export default function Home() {
                 key={categoria}
                 className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-sm font-medium text-text"
               >
-                <img src={ICONOS[categoria]} alt="" className="size-5" />
+                <img src={ICONOS[categoria]} alt="" className="size-4" />
                 {etiquetaCategoria(categoria)}
               </li>
             ))}
