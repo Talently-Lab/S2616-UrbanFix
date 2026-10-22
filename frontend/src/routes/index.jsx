@@ -22,6 +22,7 @@ import NotFound from '../pages/public/NotFound'
 import Register from '../pages/public/Register'
 import {
   TecnicoDashboard,
+  TecnicoDetalleDisponible,
   TecnicoDetalleTrabajo,
   TecnicoDisponibles,
   TecnicoPerfil,
@@ -50,6 +51,7 @@ export const router = createBrowserRouter([
     children: [
       { path: '/tecnico', element: <TecnicoDashboard /> },
       { path: '/tecnico/disponibles', element: <TecnicoDisponibles /> },
+      { path: '/tecnico/disponibles/:id', element: <TecnicoDetalleDisponible /> },
       { path: '/tecnico/trabajos', element: <TecnicoTrabajos /> },
       { path: '/tecnico/trabajos/:id', element: <TecnicoDetalleTrabajo /> },
       { path: '/tecnico/perfil', element: <TecnicoPerfil /> },

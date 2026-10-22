@@ -181,7 +181,11 @@ export async function rechazar(id, motivo) {
 }
 
 function verificacionMock(solicitud, user) {
-  if (!solicitud) throw new Error('No encontramos esa solicitud')
+  if (!solicitud) {
+    const error = new Error('No encontramos esa solicitud')
+    error.code = 'NO_DISPONIBLE'
+    throw error
+  }
   if (user?.role === 'cliente' && solicitud.clienteEmail !== user.email) {
     throw new Error('No tenés permiso para ver esta solicitud')
   }
@@ -190,7 +194,10 @@ function verificacionMock(solicitud, user) {
     solicitud.tecnicoEmail !== user.email &&
     solicitud.estado !== 'PENDIENTE'
   ) {
-    throw new Error('No tenés permiso para ver esta solicitud')
+    const error = new Error('Este trabajo ya fue tomado por otro técnico')
+    error.code = 'NO_DISPONIBLE'
+    error.solicitud = solicitud
+    throw error
   }
 }
 
@@ -207,7 +214,11 @@ export async function obtener(id) {
     const { data } = await api.get(`/solicitudes/${id}`)
     return data.data
   } catch (err) {
-    throw new Error(extractErrorMessage(err, 'No pudimos cargar la solicitud'))
+    const error = new Error(extractErrorMessage(err, 'No pudimos cargar la solicitud'))
+    if (err.response?.status === 403 || err.response?.status === 404) {
+      error.code = 'NO_DISPONIBLE'
+    }
+    throw error
   }
 }
 
@@ -336,5 +347,57 @@ export async function editar(id, campos) {
     return data.data
   } catch (err) {
     throw new Error(extractErrorMessage(err, 'No se pudo editar la solicitud'))
+  }
+}
+
+function transicionMock(id, desde, hacia, mensaje) {
+  const lista = readMockStore()
+  const solicitud = lista.find((s) => s.id === id)
+  if (!solicitud) throw new Error('No encontramos esa solicitud')
+  if (solicitud.estado !== desde) throw new Error(mensaje)
+
+  const ahora = new Date().toISOString()
+  const fechas =
+    hacia === 'EN_PROCESO' ? { fechaInicio: ahora } : { fechaFinalizacion: ahora }
+  const actualizada = { ...solicitud, estado: hacia, ...fechas, fechaActualizacion: ahora }
+  writeMockStore(lista.map((s) => (s.id === id ? actualizada : s)))
+  return actualizada
+}
+
+export async function iniciar(id) {
+  if (isMockAuth()) {
+    await delay(400)
+    return transicionMock(
+      id,
+      'ACEPTADA',
+      'EN_PROCESO',
+      'Solo se puede iniciar un trabajo aceptado',
+    )
+  }
+
+  try {
+    const { data } = await api.patch(`/solicitudes/${id}/iniciar`)
+    return data.data
+  } catch (err) {
+    throw new Error(extractErrorMessage(err, 'No se pudo iniciar el trabajo'))
+  }
+}
+
+export async function finalizar(id) {
+  if (isMockAuth()) {
+    await delay(400)
+    return transicionMock(
+      id,
+      'EN_PROCESO',
+      'FINALIZADA',
+      'Solo se puede finalizar un trabajo en proceso',
+    )
+  }
+
+  try {
+    const { data } = await api.patch(`/solicitudes/${id}/finalizar`)
+    return data.data
+  } catch (err) {
+    throw new Error(extractErrorMessage(err, 'No se pudo finalizar el trabajo'))
   }
 }

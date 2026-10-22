@@ -19,16 +19,34 @@ function hace(iso) {
   return `el ${fechaCorta(fecha)}`
 }
 
+// T6 — meta «Av. Siempre Viva 742 · Aceptada el 12/10» (o Finalizada/Publicada).
+function metaMiTrabajo({ direccion, estado, fechaCreacion, fechaAceptacion, fechaFinalizacion }) {
+  let accion = 'Publicada'
+  let fecha = fechaCreacion
+  if (estado === 'FINALIZADA') {
+    accion = 'Finalizada'
+    fecha = fechaFinalizacion ?? fechaAceptacion ?? fechaCreacion
+  } else if (fechaAceptacion) {
+    accion = 'Aceptada'
+    fecha = fechaAceptacion
+  }
+  const sufijo = `${accion} el ${fechaCorta(fecha)}`
+  return direccion ? `${direccion} · ${sufijo}` : sufijo
+}
+
 export default function SolicitudCard({ solicitud, to, momento = 'fecha', acciones = null }) {
   const { titulo, categoria, estado, fechaCreacion, direccion } = solicitud
 
-  const meta = direccion
-    ? momento === 'relativo'
-      ? `${direccion} · Publicada ${hace(fechaCreacion)}`
-      : `${direccion} · Creada el ${fechaCorta(fechaCreacion)}`
-    : momento === 'relativo'
-      ? `Publicada ${hace(fechaCreacion)}`
-      : `Creada el ${fechaCorta(fechaCreacion)}`
+  let meta
+  if (momento === 'relativo') {
+    const texto = `Publicada ${hace(fechaCreacion)}`
+    meta = direccion ? `${direccion} · ${texto}` : texto
+  } else if (momento === 'miTrabajo') {
+    meta = metaMiTrabajo(solicitud)
+  } else {
+    const texto = `Creada el ${fechaCorta(fechaCreacion)}`
+    meta = direccion ? `${direccion} · ${texto}` : texto
+  }
 
   const contenido = (
     <div className="flex flex-col gap-2">
@@ -49,11 +67,40 @@ export default function SolicitudCard({ solicitud, to, momento = 'fecha', accion
   const clases =
     'block rounded-card border border-border bg-surface p-5 transition-colors hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary'
 
-  if (to) {
+  if (to && !acciones) {
     return (
       <Link to={to} className={clases}>
         {contenido}
       </Link>
+    )
+  }
+
+  // Con acciones no se puede envolver todo en un <Link> (botones anidados):
+  // el título queda como link al detalle y los botones viven fuera del anchor.
+  if (to && acciones) {
+    return (
+      <article className={clases}>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-start justify-between gap-3">
+            <span className="text-xs font-medium uppercase tracking-wide text-text-muted">
+              {etiquetaCategoria(categoria)}
+            </span>
+            <EstadoSolicitudBadge estado={estado} className="shrink-0" />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <h3 className="text-lg font-semibold leading-6 text-text">
+              <Link
+                to={to}
+                className="rounded underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                {titulo}
+              </Link>
+            </h3>
+            <p className="text-sm text-text-muted">{meta}</p>
+          </div>
+          <div className="flex gap-3 pt-1">{acciones}</div>
+        </div>
+      </article>
     )
   }
 

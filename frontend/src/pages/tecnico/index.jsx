@@ -1,27 +1,32 @@
 import { useState } from 'react'
 import PagePlaceholder from '../../components/layout/PagePlaceholder'
-import { Button, EmptyState, ErrorAlert, FilterChips, Modal, Spinner, Textarea } from '../../components/ui'
+import { Button, ButtonLink, EmptyState, ErrorAlert, FilterChips, Spinner } from '../../components/ui'
 import ListaSolicitudes from '../../components/solicitudes/ListaSolicitudes'
+import ModalRechazo from '../../components/solicitudes/ModalRechazo'
 import { useAuth } from '../../hooks/useAuth'
 import { useSolicitudes } from '../../hooks/useSolicitudes'
 import { useToast } from '../../hooks/useToast'
 import { opcionesCategorias } from '../../constants/categorias'
 import { DESCRIPCIONES_VACIOS, MENSAJES_VACIOS } from '../../constants/mensajesVacios'
-import { aceptar, rechazar } from '../../services/solicitudes'
+import { aceptar } from '../../services/solicitudes'
 
 export { default as TecnicoDashboard } from './Dashboard'
+export { default as TecnicoDetalleDisponible } from './DetalleDisponible'
+export { default as TecnicoDetalleTrabajo } from './DetalleTrabajo'
 
 const FILTROS_CATEGORIA = [{ value: '', label: 'Todos' }, ...opcionesCategorias()]
 
 const FILTROS_TRABAJO = [
   { value: '', label: 'Todos' },
+  { value: 'aceptados', label: 'Aceptados' },
   { value: 'proceso', label: 'En proceso' },
-  { value: 'fin', label: 'Finalizadas' },
+  { value: 'fin', label: 'Finalizados' },
 ]
 
 function enGrupo(estado, grupo) {
-  if (grupo === 'proceso') return estado === 'ACEPTADA' || estado === 'EN_PROCESO'
-  if (grupo === 'fin') return ['FINALIZADA', 'RECHAZADA', 'CANCELADA'].includes(estado)
+  if (grupo === 'aceptados') return estado === 'ACEPTADA'
+  if (grupo === 'proceso') return estado === 'EN_PROCESO'
+  if (grupo === 'fin') return estado === 'FINALIZADA'
   return true
 }
 
@@ -31,10 +36,6 @@ export function TecnicoDisponibles() {
   const [categoria, setCategoria] = useState('')
   const [ocupadoId, setOcupadoId] = useState(null)
   const [rechazando, setRechazando] = useState(null)
-  const [motivo, setMotivo] = useState('')
-  const [errorMotivo, setErrorMotivo] = useState(null)
-  const [errorRechazo, setErrorRechazo] = useState(null)
-  const [enviandoRechazo, setEnviandoRechazo] = useState(false)
 
   const disponibles = solicitudes.filter((s) => s.estado === 'PENDIENTE')
   const filtradas = categoria
@@ -45,39 +46,13 @@ export function TecnicoDisponibles() {
     setOcupadoId(id)
     try {
       await aceptar(id)
-      show('Aceptaste el trabajo', 'success')
+      show('Trabajo aceptado. Lo ves en «Mis trabajos».', 'success')
       recargar()
     } catch (err) {
       show(err.message, 'error')
       recargar()
     } finally {
       setOcupadoId(null)
-    }
-  }
-
-  function abrirRechazo(solicitud) {
-    setRechazando(solicitud)
-    setMotivo('')
-    setErrorMotivo(null)
-    setErrorRechazo(null)
-  }
-
-  async function manejarRechazo() {
-    if (!motivo.trim()) {
-      setErrorMotivo('Contá el motivo del rechazo.')
-      return
-    }
-    setEnviandoRechazo(true)
-    setErrorRechazo(null)
-    try {
-      await rechazar(rechazando.id, motivo)
-      show('Solicitud rechazada', 'success')
-      setRechazando(null)
-      recargar()
-    } catch (err) {
-      setErrorRechazo(err.message)
-    } finally {
-      setEnviandoRechazo(false)
     }
   }
 
@@ -108,7 +83,7 @@ export function TecnicoDisponibles() {
         variant="primary-outline"
         className="flex-1"
         disabled={ocupadoId !== null}
-        onClick={() => abrirRechazo(solicitud)}
+        onClick={() => setRechazando(solicitud)}
       >
         Rechazar
       </Button>
@@ -116,37 +91,14 @@ export function TecnicoDisponibles() {
   )
 
   const modal = (
-    <Modal
-      open={Boolean(rechazando)}
+    <ModalRechazo
+      solicitud={rechazando}
       onClose={() => setRechazando(null)}
-      title="¿Rechazar este trabajo?"
-      footer={
-        <>
-          <Button variant="secondary" onClick={() => setRechazando(null)} disabled={enviandoRechazo}>
-            Cancelar
-          </Button>
-          <Button variant="danger" loading={enviandoRechazo} onClick={manejarRechazo}>
-            Rechazar
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-4">
-        {errorRechazo ? <ErrorAlert message={errorRechazo} /> : null}
-        <Textarea
-          label="Motivo"
-          aria-required="true"
-          rows={3}
-          value={motivo}
-          onChange={(event) => {
-            setMotivo(event.target.value)
-            setErrorMotivo(null)
-          }}
-          placeholder="Contá por qué no podés tomar este trabajo."
-          error={errorMotivo}
-        />
-      </div>
-    </Modal>
+      onRechazado={() => {
+        setRechazando(null)
+        recargar()
+      }}
+    />
   )
 
   if (disponibles.length === 0) {
@@ -193,7 +145,12 @@ export function TecnicoDisponibles() {
         onChange={setCategoria}
       />
 
-      <ListaSolicitudes solicitudes={filtradas} momento="relativo" acciones={acciones} />
+      <ListaSolicitudes
+        solicitudes={filtradas}
+        momento="relativo"
+        detalle="/tecnico/disponibles"
+        acciones={acciones}
+      />
 
       {modal}
     </div>
@@ -230,6 +187,11 @@ export function TecnicoTrabajos() {
           icon="🛠️"
           title={MENSAJES_VACIOS.tecnicoTrabajos}
           description={DESCRIPCIONES_VACIOS.tecnicoTrabajos}
+          action={
+            <ButtonLink to="/tecnico/disponibles" className="w-full">
+              Ver trabajos disponibles
+            </ButtonLink>
+          }
         />
       </div>
     )
@@ -264,17 +226,12 @@ export function TecnicoTrabajos() {
         onChange={setGrupo}
       />
 
-      <ListaSolicitudes solicitudes={filtradas} momento="relativo" />
+      <ListaSolicitudes
+        solicitudes={filtradas}
+        momento="miTrabajo"
+        detalle="/tecnico/trabajos"
+      />
     </div>
-  )
-}
-
-export function TecnicoDetalleTrabajo() {
-  return (
-    <PagePlaceholder
-      title="Detalle del trabajo"
-      description="Información de la solicitud asignada y acciones del técnico."
-    />
   )
 }
 
