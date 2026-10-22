@@ -182,8 +182,8 @@ export const aceptarSolicitud = async (id, user) => {
       throw error;
     }
 
-    if (solicitud.estado !== 'PENDIENTE') {
-      const error = new Error(`No se puede aceptar una solicitud en estado ${solicitud.estado}`);
+    if (solicitud.estado !== 'PENDIENTE' || solicitud.tecnicoId !== null) {
+      const error = new Error('La solicitud ya fue tomada o no se encuentra en estado PENDIENTE');
       error.status = 409;
       error.code = 'CONFLICT';
       throw error;
@@ -205,15 +205,27 @@ export const aceptarSolicitud = async (id, user) => {
       throw error;
     }
 
-    const updated = await tx.solicitudServicio.update({
-      where: { id },
+    // Actualización atómica con control de concurrencia (KAN-216):
+    // garantiza que si dos técnicos aceptan al mismo tiempo, solo el primero actualice la fila.
+    const resultado = await tx.solicitudServicio.updateMany({
+      where: {
+        id,
+        estado: 'PENDIENTE',
+        tecnicoId: null
+      },
       data: {
         estado: 'ACEPTADA',
         tecnicoId: user.id,
         fechaAceptacion: new Date()
-      },
-      select: selectSolicitud
+      }
     });
+
+    if (resultado.count === 0) {
+      const error = new Error('La solicitud ya fue tomada por otro técnico');
+      error.status = 409;
+      error.code = 'CONFLICT';
+      throw error;
+    }
 
     await tx.historialEstadoSolicitud.create({
       data: {
@@ -225,7 +237,10 @@ export const aceptarSolicitud = async (id, user) => {
       }
     });
 
-    return updated;
+    return await tx.solicitudServicio.findUnique({
+      where: { id },
+      select: selectSolicitud
+    });
   });
 };
 
