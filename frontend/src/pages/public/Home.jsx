@@ -2,8 +2,25 @@ import { Link, Navigate } from 'react-router-dom'
 import { ButtonLink, Spinner } from '../../components/ui'
 import { CATEGORIAS, etiquetaCategoria } from '../../constants/categorias'
 import { useAuth } from '../../hooks/useAuth'
+import iconAlbanileria from '../../assets/categorias/albanileria.png'
+import iconCarpinteria from '../../assets/categorias/carpinteria.png'
+import iconCerrajeria from '../../assets/categorias/cerrajeria.png'
+import iconElectricidad from '../../assets/categorias/electricidad.png'
+import iconGas from '../../assets/categorias/gas.png'
+import iconOtro from '../../assets/categorias/otro.png'
+import iconPintura from '../../assets/categorias/pintura.png'
+import iconPlomeria from '../../assets/categorias/plomeria.png'
 
-const etiquetasServicios = CATEGORIAS.map(etiquetaCategoria)
+const ICONOS = {
+  PLOMERIA: iconPlomeria,
+  ELECTRICIDAD: iconElectricidad,
+  GAS: iconGas,
+  CARPINTERIA: iconCarpinteria,
+  PINTURA: iconPintura,
+  CERRAJERIA: iconCerrajeria,
+  ALBANILERIA: iconAlbanileria,
+  OTRO: iconOtro,
+}
 
 const PASOS = [
   {
@@ -91,12 +108,13 @@ export default function Home() {
         <section className="flex flex-col gap-4 pb-4">
           <h2 className="text-2xl font-bold text-text">Servicios</h2>
           <ul className="flex flex-wrap gap-2">
-            {etiquetasServicios.map((etiqueta) => (
+            {CATEGORIAS.map((categoria) => (
               <li
-                key={etiqueta}
-                className="inline-flex rounded-full border border-border bg-surface px-3 py-1.5 text-sm font-medium text-text"
+                key={categoria}
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-sm font-medium text-text"
               >
-                {etiqueta}
+                <img src={ICONOS[categoria]} alt="" className="size-5" />
+                {etiquetaCategoria(categoria)}
               </li>
             ))}
           </ul>
