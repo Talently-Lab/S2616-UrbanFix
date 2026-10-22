@@ -2,14 +2,14 @@ import { Link, Navigate } from 'react-router-dom'
 import { ButtonLink, Spinner } from '../../components/ui'
 import { CATEGORIAS, etiquetaCategoria } from '../../constants/categorias'
 import { useAuth } from '../../hooks/useAuth'
-import iconAlbanileria from '../../assets/categorias/albanileria.png'
-import iconCarpinteria from '../../assets/categorias/carpinteria.png'
-import iconCerrajeria from '../../assets/categorias/cerrajeria.png'
-import iconElectricidad from '../../assets/categorias/electricidad.png'
-import iconGas from '../../assets/categorias/gas.png'
-import iconOtro from '../../assets/categorias/otro.png'
-import iconPintura from '../../assets/categorias/pintura.png'
-import iconPlomeria from '../../assets/categorias/plomeria.png'
+import iconAlbanileria from '../../assets/categorias/albanileria-icono.png'
+import iconCarpinteria from '../../assets/categorias/carpinteria-icono.png'
+import iconCerrajeria from '../../assets/categorias/cerrajeria-icono.png'
+import iconElectricidad from '../../assets/categorias/electricidad-icono.png'
+import iconGas from '../../assets/categorias/gas-icono.png'
+import iconOtro from '../../assets/categorias/otro-icono.png'
+import iconPintura from '../../assets/categorias/pintura-icono.png'
+import iconPlomeria from '../../assets/categorias/plomeria-icono.png'
 
 const ICONOS = {
   PLOMERIA: iconPlomeria,
@@ -107,14 +107,16 @@ export default function Home() {
 
         <section className="flex flex-col gap-4 pb-4">
           <h2 className="text-2xl font-bold text-text">Servicios</h2>
-          <ul className="flex flex-wrap gap-2">
+          <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-8">
             {CATEGORIAS.map((categoria) => (
               <li
                 key={categoria}
-                className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-sm font-medium text-text"
+                className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface py-4"
               >
-                <img src={ICONOS[categoria]} alt="" className="size-4" />
-                {etiquetaCategoria(categoria)}
+                <img src={ICONOS[categoria]} alt="" className="size-10 rounded-full" />
+                <span className="text-center text-xs font-medium text-text">
+                  {etiquetaCategoria(categoria)}
+                </span>
               </li>
             ))}
           </ul>
