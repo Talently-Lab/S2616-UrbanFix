@@ -7,6 +7,7 @@ import { DESCRIPCIONES_VACIOS, MENSAJES_VACIOS } from '../../constants/mensajesV
 
 export { default as ClienteDashboard } from './Dashboard'
 export { default as ClienteNuevaSolicitud } from './CrearSolicitud'
+export { default as ClienteDetalleSolicitud } from './DetalleSolicitud'
 
 const FILTROS_ESTADO = [
   { value: '', label: 'Todas' },
@@ -87,15 +88,6 @@ export function ClienteSolicitudes() {
         Nueva solicitud
       </ButtonLink>
     </div>
-  )
-}
-
-export function ClienteDetalleSolicitud() {
-  return (
-    <PagePlaceholder
-      title="Detalle de solicitud"
-      description="Estado, técnico asignado y acciones sobre la solicitud."
-    />
   )
 }
 

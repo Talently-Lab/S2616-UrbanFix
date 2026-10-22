@@ -179,3 +179,162 @@ export async function rechazar(id, motivo) {
     throw new Error(extractErrorMessage(err, 'No se pudo rechazar la solicitud'))
   }
 }
+
+function verificacionMock(solicitud, user) {
+  if (!solicitud) throw new Error('No encontramos esa solicitud')
+  if (user?.role === 'cliente' && solicitud.clienteEmail !== user.email) {
+    throw new Error('No tenés permiso para ver esta solicitud')
+  }
+  if (
+    user?.role === 'tecnico' &&
+    solicitud.tecnicoEmail !== user.email &&
+    solicitud.estado !== 'PENDIENTE'
+  ) {
+    throw new Error('No tenés permiso para ver esta solicitud')
+  }
+}
+
+export async function obtener(id) {
+  if (isMockAuth()) {
+    await delay(300)
+    const user = readStoredSession()?.user ?? null
+    const solicitud = readMockStore().find((s) => s.id === id)
+    verificacionMock(solicitud, user)
+    return solicitud
+  }
+
+  try {
+    const { data } = await api.get(`/solicitudes/${id}`)
+    return data.data
+  } catch (err) {
+    throw new Error(extractErrorMessage(err, 'No pudimos cargar la solicitud'))
+  }
+}
+
+// Historial en mock: se deriva de las fechas del ciclo de vida (el backend
+// real expone GET /solicitudes/:id/historial con las mismas etiquetas).
+function historialMock(solicitud) {
+  const eventos = [
+    {
+      estadoAnterior: null,
+      estadoNuevo: 'PENDIENTE',
+      accion: null,
+      cambiadoPor: { nombre: solicitud.cliente?.nombre ?? 'Cliente' },
+      fechaCambio: solicitud.fechaCreacion,
+    },
+  ]
+  if (solicitud.fechaAceptacion) {
+    eventos.push({
+      estadoAnterior: 'PENDIENTE',
+      estadoNuevo: 'ACEPTADA',
+      accion: null,
+      cambiadoPor: { nombre: solicitud.tecnico?.nombre ?? 'Técnico' },
+      fechaCambio: solicitud.fechaAceptacion,
+    })
+  }
+  if (solicitud.fechaInicio) {
+    eventos.push({
+      estadoAnterior: 'ACEPTADA',
+      estadoNuevo: 'EN_PROCESO',
+      accion: null,
+      cambiadoPor: { nombre: solicitud.tecnico?.nombre ?? 'Técnico' },
+      fechaCambio: solicitud.fechaInicio,
+    })
+  }
+  if (solicitud.fechaFinalizacion) {
+    eventos.push({
+      estadoAnterior: 'EN_PROCESO',
+      estadoNuevo: 'FINALIZADA',
+      accion: null,
+      cambiadoPor: { nombre: solicitud.tecnico?.nombre ?? 'Técnico' },
+      fechaCambio: solicitud.fechaFinalizacion,
+    })
+  }
+  if (solicitud.fechaCancelacion) {
+    eventos.push({
+      estadoAnterior: solicitud.estado,
+      estadoNuevo: 'CANCELADA',
+      accion: null,
+      cambiadoPor: { nombre: solicitud.cliente?.nombre ?? 'Cliente' },
+      motivo: solicitud.motivoCancelacion ?? null,
+      fechaCambio: solicitud.fechaCancelacion,
+    })
+  }
+  return eventos
+}
+
+export async function historial(id) {
+  if (isMockAuth()) {
+    await delay(200)
+    const solicitud = readMockStore().find((s) => s.id === id)
+    verificacionMock(solicitud, readStoredSession()?.user ?? null)
+    return historialMock(solicitud)
+  }
+
+  try {
+    const { data } = await api.get(`/solicitudes/${id}/historial`)
+    return data.data ?? []
+  } catch (err) {
+    throw new Error(extractErrorMessage(err, 'No pudimos cargar el historial'))
+  }
+}
+
+export async function cancelar(id, motivo) {
+  const motivoLimpio = motivo?.trim() ?? ''
+  if (!motivoLimpio) throw new Error('El motivo es obligatorio')
+
+  if (isMockAuth()) {
+    await delay(400)
+    const lista = readMockStore()
+    const solicitud = lista.find((s) => s.id === id)
+    if (!solicitud) throw new Error('No encontramos esa solicitud')
+    if (!['PENDIENTE', 'ACEPTADA'].includes(solicitud.estado)) {
+      throw new Error('Esta solicitud ya no se puede cancelar')
+    }
+
+    const ahora = new Date().toISOString()
+    const actualizada = {
+      ...solicitud,
+      estado: 'CANCELADA',
+      motivoCancelacion: motivoLimpio,
+      fechaCancelacion: ahora,
+      fechaActualizacion: ahora,
+    }
+    writeMockStore(lista.map((s) => (s.id === id ? actualizada : s)))
+    return actualizada
+  }
+
+  try {
+    const { data } = await api.patch(`/solicitudes/${id}/cancelar`, { motivo: motivoLimpio })
+    return data.data
+  } catch (err) {
+    throw new Error(extractErrorMessage(err, 'No se pudo cancelar la solicitud'))
+  }
+}
+
+export async function editar(id, campos) {
+  if (isMockAuth()) {
+    await delay(400)
+    const lista = readMockStore()
+    const solicitud = lista.find((s) => s.id === id)
+    if (!solicitud) throw new Error('No encontramos esa solicitud')
+    if (solicitud.estado !== 'PENDIENTE') {
+      throw new Error('Solo se puede editar una solicitud pendiente')
+    }
+
+    const actualizada = {
+      ...solicitud,
+      ...campos,
+      fechaActualizacion: new Date().toISOString(),
+    }
+    writeMockStore(lista.map((s) => (s.id === id ? actualizada : s)))
+    return actualizada
+  }
+
+  try {
+    const { data } = await api.patch(`/solicitudes/${id}`, campos)
+    return data.data
+  } catch (err) {
+    throw new Error(extractErrorMessage(err, 'No se pudo editar la solicitud'))
+  }
+}
