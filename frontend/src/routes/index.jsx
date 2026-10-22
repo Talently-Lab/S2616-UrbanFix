@@ -1,9 +1,11 @@
 import { createBrowserRouter } from 'react-router-dom'
 import ProtectedRoute from '../components/auth/ProtectedRoute'
+import AdminShell from '../components/layout/AdminShell'
 import { ROLES } from '../constants/roles'
 import {
   AdminConfiguracion,
   AdminDashboard,
+  AdminDetalleSolicitud,
   AdminReportes,
   AdminSolicitudes,
   AdminUsuarios,
@@ -61,11 +63,17 @@ export const router = createBrowserRouter([
   {
     element: <ProtectedRoute roles={[ROLES.ADMIN]} />,
     children: [
-      { path: '/admin', element: <AdminDashboard /> },
-      { path: '/admin/usuarios', element: <AdminUsuarios /> },
-      { path: '/admin/solicitudes', element: <AdminSolicitudes /> },
-      { path: '/admin/reportes', element: <AdminReportes /> },
-      { path: '/admin/configuracion', element: <AdminConfiguracion /> },
+      {
+        element: <AdminShell />,
+        children: [
+          { path: '/admin', element: <AdminDashboard /> },
+          { path: '/admin/usuarios', element: <AdminUsuarios /> },
+          { path: '/admin/solicitudes', element: <AdminSolicitudes /> },
+          { path: '/admin/solicitudes/:id', element: <AdminDetalleSolicitud /> },
+          { path: '/admin/reportes', element: <AdminReportes /> },
+          { path: '/admin/configuracion', element: <AdminConfiguracion /> },
+        ],
+      },
     ],
   },
 
