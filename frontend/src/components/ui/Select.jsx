@@ -6,8 +6,10 @@ const FIELD =
 export default function Select({ label, hint, error, id, options = [], className = '', ...props }) {
   const generatedId = useId()
   const selectId = id ?? generatedId
+  const messageId = `${selectId}-message`
   const border = error ? 'border-error' : 'border-border-input'
   const sinElegir = props.value === '' || props.value === undefined || props.value === null
+  const describedBy = error || hint ? messageId : undefined
 
   return (
     <div className="flex flex-col gap-1 text-sm">
@@ -19,6 +21,7 @@ export default function Select({ label, hint, error, id, options = [], className
       <select
         id={selectId}
         aria-invalid={Boolean(error)}
+        aria-describedby={describedBy}
         className={`${FIELD} ${border} ${sinElegir ? 'text-text-muted' : ''} ${className}`}
         {...props}
       >
@@ -30,9 +33,13 @@ export default function Select({ label, hint, error, id, options = [], className
       </select>
 
       {error ? (
-        <span className="text-xs text-error">{error}</span>
+        <span id={messageId} role="alert" className="text-sm text-error">
+          {error}
+        </span>
       ) : hint ? (
-        <span className="text-xs text-text-muted">{hint}</span>
+        <span id={messageId} className="text-sm text-text-muted">
+          {hint}
+        </span>
       ) : null}
     </div>
   )

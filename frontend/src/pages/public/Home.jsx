@@ -20,7 +20,7 @@ export default function Home() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-6 px-6 text-center">
+    <main className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-6 px-5 text-center sm:px-6">
       <h1 className="text-3xl font-bold leading-9 text-text">UrbanFix</h1>
       <p className="text-text-muted">
         Marketplace de oficios que conecta clientes con técnicos independientes.

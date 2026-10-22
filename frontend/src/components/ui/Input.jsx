@@ -21,15 +21,17 @@ function EyeIcon({ off = false }) {
 }
 
 const FIELD =
-  'min-h-11 w-full rounded-field border bg-surface px-3 py-2 text-base text-text placeholder:text-text-muted/60 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-bg disabled:text-text-muted'
+  'min-h-11 w-full rounded-field border bg-surface px-3 py-2 text-base text-text placeholder:text-text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary disabled:bg-bg disabled:text-text-muted'
 
 export default function Input({ label, hint, error, id, className = '', type = 'text', ...props }) {
   const generatedId = useId()
   const inputId = id ?? generatedId
+  const messageId = `${inputId}-message`
   const [visible, setVisible] = useState(false)
   const isPassword = type === 'password'
   const inputType = isPassword && visible ? 'text' : type
   const border = error ? 'border-error' : 'border-border-input'
+  const describedBy = error || hint ? messageId : undefined
 
   return (
     <div className="flex flex-col gap-1 text-sm">
@@ -43,6 +45,7 @@ export default function Input({ label, hint, error, id, className = '', type = '
           id={inputId}
           type={inputType}
           aria-invalid={Boolean(error)}
+          aria-describedby={describedBy}
           className={`${FIELD} ${border} ${isPassword ? 'pr-11' : ''} ${className}`}
           {...props}
         />
@@ -60,9 +63,13 @@ export default function Input({ label, hint, error, id, className = '', type = '
       </div>
 
       {error ? (
-        <span className="text-xs text-error">{error}</span>
+        <span id={messageId} role="alert" className="text-sm text-error">
+          {error}
+        </span>
       ) : hint ? (
-        <span className="text-xs text-text-muted">{hint}</span>
+        <span id={messageId} className="text-sm text-text-muted">
+          {hint}
+        </span>
       ) : null}
     </div>
   )

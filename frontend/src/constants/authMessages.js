@@ -4,7 +4,7 @@ export const AUTH_MESSAGES = {
     subtitle: 'Es gratis y lleva un minuto.',
     submit: 'Crear cuenta',
     submitting: 'Creando cuenta...',
-    alternateLink: 'Ingresa',
+    alternateLink: 'Ingresá',
     celularHint: 'Lo ve el técnico que acepta tu solicitud.',
     passwordHint: 'Mínimo 8 caracteres.',
     submitError: 'No se pudo crear la cuenta',
@@ -14,7 +14,7 @@ export const AUTH_MESSAGES = {
     subtitle: 'Entrá para pedir o gestionar servicios del hogar.',
     submit: 'Ingresar',
     submitting: 'Ingresando...',
-    alternateLink: 'Registro',
+    alternateLink: 'Registrate',
     invalidCredentials:
       'No pudimos iniciar sesión. Revisá tu correo y tu contraseña e intentá de nuevo.',
   },

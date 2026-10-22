@@ -13,7 +13,7 @@ export const VARIANTS = {
     'border border-primary bg-surface text-primary hover:bg-primary/5 disabled:text-primary/40 disabled:border-primary/40',
   secondary:
     'border border-border-input bg-surface text-text hover:bg-bg disabled:text-text-muted/50',
-  danger: 'bg-error text-white hover:brightness-90 disabled:bg-error/40',
+  danger: 'bg-error text-white hover:bg-error-hover disabled:bg-error/40',
   ghost: 'text-text-muted hover:bg-border/50 disabled:text-text-muted/50',
 }
 

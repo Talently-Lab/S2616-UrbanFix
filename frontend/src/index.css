@@ -24,6 +24,8 @@
   --color-success: #15803d;
   --color-warning: #b45309;
   --color-error: #b91c1c;
+  --color-error-hover: #991b1b;
+  --color-error-soft: #fee2e2;
   --color-info: #0369a1;
 
   /* Radios: 6px campos/botones · 12px tarjetas/modales · full etiquetas */

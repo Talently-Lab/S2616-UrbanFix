@@ -3,7 +3,7 @@ export default function FilterChips({ options, value, onChange, label }) {
     <div
       role="group"
       aria-label={label}
-      className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:px-0"
+      className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 sm:mx-0 sm:px-0"
     >
       {options.map((option) => {
         const activo = option.value === value

@@ -119,7 +119,7 @@ export function TecnicoDisponibles() {
     <Modal
       open={Boolean(rechazando)}
       onClose={() => setRechazando(null)}
-      title="Rechazar solicitud"
+      title="¿Rechazar este trabajo?"
       footer={
         <>
           <Button variant="secondary" onClick={() => setRechazando(null)} disabled={enviandoRechazo}>

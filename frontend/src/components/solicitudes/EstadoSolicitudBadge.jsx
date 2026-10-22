@@ -69,7 +69,7 @@ const ESTADOS = {
   ACEPTADA: { className: 'bg-[#DBEAFE] text-[#1E40AF]', Icono: IconoCheck },
   EN_PROCESO: { className: 'bg-[#EDE9FE] text-[#5B21B6]', Icono: IconoLlave },
   FINALIZADA: { className: 'bg-[#DCFCE7] text-[#166534]', Icono: IconoCheckDoble },
-  RECHAZADA: { className: 'bg-[#FEE2E2] text-[#991B1B]', Icono: IconoCruz },
+  RECHAZADA: { className: 'bg-error-soft text-error-hover', Icono: IconoCruz },
   CANCELADA: { className: 'bg-[#F3F4F6] text-[#374151]', Icono: IconoProhibido },
 }
 

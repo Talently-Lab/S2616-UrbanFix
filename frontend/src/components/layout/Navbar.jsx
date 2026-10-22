@@ -91,7 +91,7 @@ export default function Navbar() {
 
   return (
     <header className="border-b border-border bg-surface">
-      <div className="relative mx-auto flex w-full max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
+      <div className="relative mx-auto flex w-full max-w-5xl items-center justify-between px-5 py-3 sm:px-6">
         <NavLink
           to={nav?.panel ?? '/'}
           className="text-lg font-bold text-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"

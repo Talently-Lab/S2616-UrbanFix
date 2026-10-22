@@ -1,6 +1,6 @@
 export default function AuthLayout({ title, subtitle, children }) {
   return (
-    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-start gap-6 px-6 py-10 sm:justify-center">
+    <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-start gap-6 px-5 py-10 sm:justify-center sm:px-6">
       <div className="flex flex-col gap-4">
         <span className="text-xl font-bold text-primary">UrbanFix</span>
         <div className="flex flex-col gap-1">
