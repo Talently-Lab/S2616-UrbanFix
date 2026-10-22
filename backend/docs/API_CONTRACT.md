@@ -293,3 +293,46 @@ Ejemplo de error de transición:
 4. **Token:** falta agregar `jsonwebtoken` a las dependencias del backend.
 5. **Validación:** definir librería (por ejemplo `zod`) para los `VALIDATION_ERROR`.
 
+
+## 10. Administración
+
+Todas las rutas bajo `/api/admin/*` son privadas y requieren un JWT válido con rol `ADMIN`. El router aplica `authenticate` y `authorize(['ADMIN'])` antes de registrar cualquier endpoint, por lo que un token ausente o inválido devuelve `401 UNAUTHORIZED` y un usuario con otro rol devuelve `403 FORBIDDEN`.
+
+### GET `/admin/usuarios` 🔒 (ADMIN)
+
+Lista usuarios de la plataforma con paginación.
+
+Query params (opcionales): `page` (def. 1), `limit` (def. 20, máx. 100).
+
+Response `200`:
+
+```json
+{
+  "data": [Usuario],
+  "meta": { "page": 1, "limit": 20, "total": 57 }
+}
+```
+
+Ordenados por `fechaCreacion` descendente. Nunca incluye `passwordHash`.
+
+### GET `/admin/usuarios/:id` 🔒 (ADMIN)
+
+Detalle de un usuario por UUID.
+
+Response `200`: `{ "data": { Usuario } }`
+
+Errores: `404 NOT_FOUND` si el usuario no existe.
+
+### PATCH `/admin/usuarios/:id` 🔒 (ADMIN)
+
+Actualiza datos administrativos del usuario. Debe enviarse al menos un campo.
+
+Request:
+
+```json
+{ "nombre": "Juan P.", "celular": "3884999999", "rol": "TECNICO" }
+```
+
+Response `200`: `{ "data": { Usuario } }`
+
+Errores: `400 VALIDATION_ERROR`, `404 NOT_FOUND`.
