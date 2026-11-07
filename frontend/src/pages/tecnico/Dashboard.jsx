@@ -23,7 +23,11 @@ export default function TecnicoDashboard() {
   return (
     <div className="flex flex-col gap-8">
       <header>
-        <h1 className="text-2xl font-bold text-text">Hola, {user?.name} 👋</h1>
+        <h1 className="text-2xl font-bold text-text">
+          <span className="whitespace-nowrap">
+            Hola{user?.name?.trim() ? `, ${user.name.trim()}` : ''} 👋
+          </span>
+        </h1>
         <p className="mt-1 text-text-muted">Estos son tus trabajos de hoy.</p>
       </header>
 

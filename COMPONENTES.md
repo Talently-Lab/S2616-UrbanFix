@@ -11,7 +11,6 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 ### 🧱 Layout
 | # | Componente | Ruta / uso | Notas |
 |---|-------------|-----------|-------|
-| C03 | `SidebarNav` | `/cliente`, `/tecnico`, `/admin` | Menú lateral con secciones por perfil (pantalla de escritorio para admin) |
 | C04 | `Footer` | públicas | Info básica, links |
 
 ### 👤 Cliente (`/cliente`)
@@ -31,8 +30,6 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 ### 🛠️ Administrador (`/admin`)
 | # | Componente | Ruta / uso | Notas |
 |---|-------------|-----------|-------|
-| C20 | `UsuarioTable` | `/admin/usuarios` | Tabla con acciones de rol |
-| C21 | `SolicitudesTable` | `/admin/solicitudes` | Tabla global de solicitudes |
 | C22 | `ReportePanel` | `/admin/reportes` | Reportes operativos |
 | C23 | `ConfigForm` | `/admin/configuracion` | Ajustes generales |
 
@@ -51,7 +48,10 @@ Cómo usarlo: mover la tarjeta de columna al avanzar. Estados posibles: `Backlog
 | — | `ClienteSolicitudes` | `/cliente/solicitudes` | **Diseño aplicado**: chips de estado (D8), listado D2, empty state con copy del diseño y CTA "Nueva solicitud" full width; filtros client-side sobre `GET /solicitudes` |
 | — | `TecnicoDisponibles` | `/tecnico/disponibles` | **Diseño aplicado** (D3): chips de categoría, solo `PENDIENTE`, Aceptar (`PATCH /:id/aceptar`) y Rechazar con modal de motivo (D7, `PATCH /:id/rechazar`); meta "Publicada hace X min" |
 | — | `TecnicoTrabajos` | `/tecnico/trabajos` | **Diseño aplicado** (D4): mis solicitudes con chips En proceso / Finalizadas; sin diseño de captura — mismo estilo de listado |
-| C19 | `AdminDashboard` | `/admin` | **Conectado**: KPIs con D10 `ResumenCard` (total, pendientes, en proceso, finalizadas) desde `GET /solicitudes`; EmptyState cuando no hay datos; falta el diseño final |
+| C19 | `AdminDashboard` | `/admin` | **Diseño aplicado (Semana 6)**: KPIs con D10 `ResumenCard` + **`Tabs`** (`components/ui/Tabs.jsx`, semántica tablist con flechas) que alternan entre `TablaSolicitudes` y `TablaUsuarios` |
+| C03 | `SidebarNav` | `/admin` | **Diseño aplicado**: `AdminShell` con links Panel / Solicitudes / Usuarios; **responsive (S7)**: en móvil la barra queda arriba en horizontal con scroll, en escritorio lateral (`lg:`) |
+| C20 | `UsuarioTable` | `/admin/usuarios` | **Diseño aplicado (Semana 6)**: `components/admin/TablaUsuarios.jsx` — `GET /admin/usuarios`, búsqueda, filtro por rol, paginación, `RoleBadge` y cambio de rol por fila (`PATCH /admin/usuarios/:id`) con UI optimista |
+| C21 | `SolicitudesTable` | `/admin/solicitudes` | **Diseño aplicado (Semana 6)**: `components/admin/TablaSolicitudes.jsx` — filtros estado/categoría/búsqueda, paginación y **moderación**: «Cancelar orden» por fila con modal de motivo obligatorio y actualización optimista |
 | D10 | `ResumenCard` | paneles | **Maquetado** (`components/ui/ResumenCard.jsx`): número + título con tokens; pendiente la forma visual |
 | C05 | `LoginForm` | `/login` | **Diseño aplicado** (capturas de UX/UI): logo, título + subtítulo, banner de error con ícono, errores por campo ("Revisá que esté bien escrito." / "Revisá tu contraseña.") y cargando "Ingresando…"; conectado a `POST /auth/login` con redirect según rol, selector de perfil sólo en modo mock |
 | C06 | `RegisterForm` | `/registro` | **Diseño aplicado**: selector segmentado "Quiero" (Pedir un servicio / Soy técnico), orden de campos del diseño, hints de celular y contraseña, errores por campo (email duplicado → 409, contraseña < 8) y cargando "Creando cuenta…"; conectado a `POST /auth/register` con toast de éxito |

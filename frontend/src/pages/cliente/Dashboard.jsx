@@ -17,7 +17,11 @@ export default function ClienteDashboard() {
     <div className="flex flex-col gap-8">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-text">Hola, {user?.name} 👋</h1>
+          <h1 className="text-2xl font-bold text-text">
+            <span className="whitespace-nowrap">
+              Hola{user?.name?.trim() ? `, ${user.name.trim()}` : ''} 👋
+            </span>
+          </h1>
           <p className="mt-1 text-text-muted">¿En qué necesitás ayuda hoy?</p>
         </div>
         <ButtonLink to="/cliente/solicitudes/nueva">Nueva solicitud</ButtonLink>
