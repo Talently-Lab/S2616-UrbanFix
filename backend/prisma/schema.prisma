@@ -39,6 +39,7 @@ model Usuario {
   nombre             String
   celular            String? // opcional
   rol                Rol      @default(CLIENTE)
+  lastLogin          DateTime?
   fechaCreacion      DateTime @default(now())
   fechaActualizacion DateTime @updatedAt
 
