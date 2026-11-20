@@ -1,3 +1,4 @@
+
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import AuthLayout from '../../components/auth/AuthLayout'
@@ -17,8 +18,15 @@ const COPY = AUTH_MESSAGES.login
 
 function validate({ email, password }) {
   const errors = {}
-  if (!EMAIL_PATTERN.test(email)) errors.email = FIELD_ERRORS.emailInvalid
-  if (!password) errors.password = FIELD_ERRORS.passwordInvalid
+
+  if (!EMAIL_PATTERN.test(email)) {
+    errors.email = FIELD_ERRORS.emailInvalid
+  }
+
+  if (!password) {
+    errors.password = FIELD_ERRORS.passwordInvalid
+  }
+
   return errors
 }
 
@@ -26,6 +34,7 @@ export default function Login() {
   const { login, status } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState(ROLES.CLIENTE)
@@ -38,8 +47,10 @@ export default function Login() {
   function clearFieldError(field) {
     setFieldErrors((current) => {
       if (!current[field]) return current
+
       const next = { ...current }
       delete next[field]
+
       return next
     })
   }
@@ -50,21 +61,42 @@ export default function Login() {
 
     const errors = validate({ email, password })
     setFieldErrors(errors)
+
     if (Object.keys(errors).length > 0) return
 
     try {
       const session = await login({ email, password, role })
-      navigate(from ?? `/${session.user.role}`, { replace: true })
+
+      // Redirigir según el rol autenticado.
+      const homePath = `/${session.user.role}`
+
+      // Conservar la ruta anterior solo si corresponde
+      // al rol del usuario que acaba de iniciar sesión.
+      const destino =
+        from === homePath || from?.startsWith(`${homePath}/`)
+          ? from
+          : homePath
+
+      navigate(destino, { replace: true })
     } catch (err) {
       const message = err.message ?? ''
+
       if (isCredentialsError(message)) {
         setError(COPY.invalidCredentials)
-        setFieldErrors({ email: FIELD_ERRORS.emailInvalid, password: FIELD_ERRORS.passwordInvalid })
+        setFieldErrors({
+          email: FIELD_ERRORS.emailInvalid,
+          password: FIELD_ERRORS.passwordInvalid,
+        })
         return
       }
+
       const mapped = fieldsFromDetails(err)
-      if (Object.keys(mapped).length > 0) setFieldErrors(mapped)
-      else setError(message || COPY.invalidCredentials)
+
+      if (Object.keys(mapped).length > 0) {
+        setFieldErrors(mapped)
+      } else {
+        setError(message || COPY.invalidCredentials)
+      }
     }
   }
 
@@ -78,7 +110,11 @@ export default function Login() {
 
       {error ? <ErrorAlert message={error} /> : null}
 
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        className="flex flex-col gap-4"
+      >
         <Input
           label="Correo electrónico"
           type="email"
@@ -92,6 +128,7 @@ export default function Login() {
           placeholder="nombre@correo.com"
           error={fieldErrors.email}
         />
+
         <Input
           label="Contraseña"
           type="password"
@@ -105,6 +142,7 @@ export default function Login() {
           placeholder="••••••••"
           error={fieldErrors.password}
         />
+
         {isMockAuth() ? (
           <Select
             label="Perfil"
@@ -118,14 +156,21 @@ export default function Login() {
           />
         ) : null}
 
-        <Button type="submit" loading={isLoading} className="w-full">
+        <Button
+          type="submit"
+          loading={isLoading}
+          className="w-full"
+        >
           {isLoading ? COPY.submitting : COPY.submit}
         </Button>
       </form>
 
       <p className="text-sm text-text-muted">
         ¿No tenés cuenta?{' '}
-        <Link className="font-medium text-primary underline" to="/registro">
+        <Link
+          className="font-medium text-primary underline"
+          to="/registro"
+        >
           {COPY.alternateLink}
         </Link>
       </p>
