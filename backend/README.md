@@ -71,7 +71,7 @@ node --input-type=module -e "import { randomBytes } from 'node:crypto'; console.
 | `DATABASE_URL` | Conexión PostgreSQL para Prisma CLI y el adaptador de la API; el ejemplo utiliza esquema `public`. |
 | `PORT` | Puerto HTTP; predeterminado `3001`. |
 | `JWT_SECRET` | Firma y validación del JWT. Configurarlo explícitamente: el código actual todavía tiene fallback `secret`, pendiente de eliminar en #11. |
-| `TEST_DATABASE_URL` | Variable dedicada del runner de migraciones de #9, hacia un servidor exclusivo de laboratorio y con privilegio `CREATEDB`. No sustituye la conexión de la API. |
+| `TEST_DATABASE_URL` | Variable dedicada para `test:migrations` y opcional para `npm test` (si no se usa Docker automático), hacia un servidor exclusivo de laboratorio con privilegio `CREATEDB`. Por seguridad, nunca se hace fallback automático desde `DATABASE_URL`. |
 
 `JWT_EXPIRES_IN` todavía no se consume: los tokens duran siete días por código. Tampoco hay variable de orígenes CORS consumida; `cors()` permite `*`. La configuración validada, expiración configurable y allowlist CORS se trabajan en [#11](https://github.com/Talently-Lab/S2616-UrbanFix/issues/11).
 
@@ -143,9 +143,9 @@ Ejecutar desde `backend/`:
 | `npm run db:migrate` | `prisma migrate deploy`; respetar los límites de #9. |
 | `npm run db:seed` / `npm run seed` | Seed explícito de demostración. |
 | `npm run db:studio` | Abre Prisma Studio con la base configurada. |
-| `npm test` | Actualmente falla: apunta a `../scripts/test-api.sh`, ausente. Restauración en [#10](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10). |
+| `npm test` | Suite de integración HTTP en `tests/api/runner.js`. Levanta PostgreSQL aislado (Docker efímero `postgres:16-alpine` o `TEST_DATABASE_URL`), aplica migraciones canónicas (`prisma migrate deploy`), seed de laboratorio, API en puerto libre y suite de 31 casos. Teardown automático. |
 
-Están disponibles `db:precheck` y `test:migrations`; consultar la [guía de migraciones](./docs/MIGRATION_GUIDE.md) para ejecutarlos. El runner exige `TEST_DATABASE_URL` explícita hacia PostgreSQL exclusivo de laboratorio. No apuntarlo a servidores compartidos/productivos. Para un script Node que no carga dotenv por sí mismo, usar `node --env-file=.env <ruta-del-script>` o exportar explícitamente las variables necesarias.
+Están disponibles `db:precheck` y `test:migrations`; consultar la [guía de migraciones](./docs/MIGRATION_GUIDE.md) para ejecutarlos. `test:migrations` exige `TEST_DATABASE_URL` explícita hacia PostgreSQL exclusivo de laboratorio con privilegio `CREATEDB`. `npm test` utiliza Docker efímero automáticamente si está disponible, o `TEST_DATABASE_URL` si se especifica; si ninguno está disponible, falla con instrucciones legibles sin tocar `DATABASE_URL`. Para un script Node que no carga dotenv por sí mismo, usar `node --env-file=.env <ruta-del-script>` o exportar explícitamente las variables necesarias.
 
 Los resultados y limitaciones están en [los reportes de QA](./docs/qa/). Las pruebas de flujos realizadas sobre `db push` no certifican el historial de migraciones.
 

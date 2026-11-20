@@ -227,7 +227,7 @@ TEST_DATABASE_URL="postgresql://postgres:testpass@localhost:55432/postgres" npm 
 
 - El runner genera nombres impredecibles por corrida (`uf_<label>_<uuid>`) y no borra bases preexistentes para preparar un fixture.
 - Registra las bases creadas y las limpia en `finally` ante excepciones normales, con salida no cero si falla la limpieza.
-- **Residual M1:** QA detectó una carrera entre los handlers de `SIGINT`/`SIGTERM` y el flujo principal; una interrupción puede dejar recursos propios pendientes de limpiar. Su corrección se incorpora al trabajo del runner en #10. No se garantiza limpieza completa por señal en esta revisión.
-- `SIGKILL` y una caída del host no son interceptables. Para recuperar recursos, consultar los nombres exactos registrados en el log de la corrida y comprobar su propiedad antes de eliminarlos en el servidor de laboratorio. El prefijo `uf_` por sí solo no demuestra que una base pertenezca a esa corrida.
+- **Resolución de M1 (resuelto en BE-02):** Se unificó el ciclo de vida ante señales `SIGINT` y `SIGTERM`. Los procesos hijos se terminan de forma reactiva, se comprueba la cancelación antes de crear cualquier base nueva (impidiendo la creación de bases huérfanas durante el teardown) y se realiza una limpieza unificada e idempotente tanto de las bases creadas como del sentinel propio antes de salir con código 130 o 143.
+- `SIGKILL` y una caída del host no son interceptables a nivel de proceso. Para recuperar recursos en esos casos extremos, consultar los nombres exactos registrados en el log de la corrida y comprobar su propiedad antes de eliminarlos en el servidor de laboratorio. El prefijo `uf_` por sí solo no demuestra que una base pertenezca a esa corrida.
 
 La aprobación QA del candidato está en [be-01-review-e826df7.md](./qa/be-01-review-e826df7.md). Solo el usuario puede aprobar un push a GitHub.

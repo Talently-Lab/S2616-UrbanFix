@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { execSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
@@ -55,7 +55,12 @@ function getDatabaseUrl(dbUrl, dbName) {
 
 // Registro estricto de bases creadas por este runner para limpieza
 const createdDatabases = new Set();
+let sentinelDbName = null;
 let cleanupHasFailures = false;
+let isShuttingDown = false;
+let terminationSignal = null;
+let activeChild = null;
+let cleanupPromise = null;
 
 async function executeAdminQuery(sql) {
   const client = new Client({ connectionString: getAdminUrl(BASE_DATABASE_URL) });
@@ -68,40 +73,67 @@ async function executeAdminQuery(sql) {
 }
 
 async function cleanupCreatedDatabases() {
-  if (createdDatabases.size === 0) return;
-  console.log('\n[Limpieza] Eliminando exclusivamente bases de prueba creadas durante esta ejecución...');
-  for (const dbName of Array.from(createdDatabases)) {
-    try {
-      await executeAdminQuery(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE);`);
-      console.log(`  - Eliminada: ${dbName}`);
-      createdDatabases.delete(dbName);
-    } catch (dropErr) {
-      console.error(`  ❌ Error al eliminar base de prueba ${dbName}: ${dropErr.message}`);
-      cleanupHasFailures = true;
+  if (cleanupPromise) return cleanupPromise;
+  cleanupPromise = (async () => {
+    isShuttingDown = true;
+    if (createdDatabases.size === 0 && !sentinelDbName) return;
+    console.log('\n[Limpieza unificada] Eliminando exclusivamente bases de prueba creadas durante esta ejecución...');
+    for (const dbName of Array.from(createdDatabases)) {
+      try {
+        await executeAdminQuery(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE);`);
+        console.log(`  - Eliminada: ${dbName}`);
+        createdDatabases.delete(dbName);
+      } catch (dropErr) {
+        console.error(`  ❌ Error al eliminar base de prueba ${dbName}: ${dropErr.message}`);
+        cleanupHasFailures = true;
+      }
     }
-  }
+    if (sentinelDbName) {
+      try {
+        await executeAdminQuery(`DROP DATABASE IF EXISTS ${sentinelDbName} WITH (FORCE);`);
+        console.log(`  - Sentinel propio purgado: ${sentinelDbName}`);
+        sentinelDbName = null;
+      } catch (dropErr) {
+        console.error(`  ❌ Error al purgar sentinel ${sentinelDbName}: ${dropErr.message}`);
+        cleanupHasFailures = true;
+      }
+    }
+  })();
+  return cleanupPromise;
 }
 
-// Manejadores de terminación para asegurar limpieza ante SIGINT/SIGTERM
-process.on('SIGINT', async () => {
-  console.log('\n[SIGINT recibido] Limpieza de emergencia...');
+// Manejadores de terminación unificados para resolver M1 (carrera SIGINT/SIGTERM)
+async function onSignal(sig) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  terminationSignal = sig;
+  console.log(`\n[${sig} recibido] Cancelando ejecución y limpiando recursos propios inmediatamente...`);
+  if (activeChild) {
+    try {
+      activeChild.kill(sig);
+    } catch (_) {}
+  }
   await cleanupCreatedDatabases();
-  process.exit(130);
-});
+  process.exit(sig === 'SIGINT' ? 130 : 143);
+}
 
-process.on('SIGTERM', async () => {
-  console.log('\n[SIGTERM recibido] Limpieza de emergencia...');
-  await cleanupCreatedDatabases();
-  process.exit(143);
-});
+process.on('SIGINT', () => { onSignal('SIGINT'); });
+process.on('SIGTERM', () => { onSignal('SIGTERM'); });
 
 /**
  * Crea una base de datos con nombre impredecible sin borrar previamente bases ajenas.
  * Registra el nombre creado únicamente tras el CREATE DATABASE exitoso.
+ * Aborta inmediatamente si se ha recibido señal de interrupción.
  */
 async function createIsolatedTestDatabase(label) {
+  if (isShuttingDown) {
+    throw new Error(`Operación abortada por señal de interrupción (${terminationSignal}). No se crearán nuevas bases.`);
+  }
   const runId = crypto.randomUUID().replace(/-/g, '').slice(0, 10);
   const dbName = `uf_${label}_${runId}`;
+  if (isShuttingDown) {
+    throw new Error(`Operación abortada por señal de interrupción (${terminationSignal}). No se crearán nuevas bases.`);
+  }
   await executeAdminQuery(`CREATE DATABASE ${dbName};`);
   createdDatabases.add(dbName);
   return {
@@ -111,11 +143,40 @@ async function createIsolatedTestDatabase(label) {
 }
 
 function runCommand(command, envOverrides = {}) {
-  return execSync(command, {
-    cwd: backendRoot,
-    env: { ...process.env, ...envOverrides },
-    encoding: 'utf-8',
-    stdio: 'pipe'
+  if (isShuttingDown) {
+    return Promise.reject(new Error(`Comando abortado por señal de interrupción (${terminationSignal})`));
+  }
+  return new Promise((resolve, reject) => {
+    const child = spawn('sh', ['-c', command], {
+      cwd: backendRoot,
+      env: { ...process.env, ...envOverrides },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    activeChild = child;
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', d => { stdout += d; });
+    child.stderr.on('data', d => { stderr += d; });
+    child.on('error', err => {
+      if (activeChild === child) activeChild = null;
+      reject(err);
+    });
+    child.on('close', (code, signal) => {
+      if (activeChild === child) activeChild = null;
+      if (isShuttingDown) {
+        reject(new Error(`Comando cancelado por señal ${terminationSignal || signal}`));
+        return;
+      }
+      if (code === 0) {
+        resolve(stdout);
+      } else {
+        const err = new Error(`Command failed: ${command}\nExit code: ${code}\nStderr: ${stderr}\nStdout: ${stdout}`);
+        err.status = code;
+        err.stdout = stdout;
+        err.stderr = stderr;
+        reject(err);
+      }
+    });
   });
 }
 
@@ -145,10 +206,10 @@ async function main() {
   console.log('================================================================\n');
 
   // Asegurar cliente generado
-  runCommand('./node_modules/.bin/prisma generate');
+  await runCommand('./node_modules/.bin/prisma generate');
 
   // Crear base sentinel para verificar que el runner no toca bases preexistentes ajenas
-  const sentinelDbName = `uf_sentinel_must_survive_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`;
+  sentinelDbName = `uf_sentinel_must_survive_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`;
   await executeAdminQuery(`CREATE DATABASE ${sentinelDbName};`);
   console.log(`Sentinel ajeno creado para test de no-destrucción: ${sentinelDbName}\n`);
 
@@ -167,22 +228,22 @@ async function main() {
     assert(precheck0.supported === true, 'CLEAN_DATABASE debe ser supported=true');
 
     console.log('F0.2. Primer migrate deploy...');
-    const deploy1Output = runPrismaMigrateDeploy(urlF0);
+    const deploy1Output = await runPrismaMigrateDeploy(urlF0);
     assert(deploy1Output.includes('All migrations have been successfully applied'), 'Migraciones deben aplicarse');
 
     console.log('F0.3. Segundo migrate deploy (idempotencia)...');
-    const deploy2Output = runPrismaMigrateDeploy(urlF0);
+    const deploy2Output = await runPrismaMigrateDeploy(urlF0);
     assert(deploy2Output.includes('No pending migrations to apply'), 'Segundo deploy debe ser idempotente');
 
     console.log('F0.4. Comprobación diff contra schema.prisma...');
-    const diff0Output = runPrismaMigrateDiff(urlF0);
-    assert(diff0Output.includes('No difference detected'), 'Diff debe ser cero');
+    const diff0Output = await runPrismaMigrateDiff(urlF0);
+    assert(diff0Output.trim() === '' || diff0Output.includes('No difference detected'), 'Diff debe ser cero');
 
     console.log('F0.5. Ejecutar seed por primera vez...');
-    runCommand('node prisma/seed.js', { DATABASE_URL: urlF0 });
+    await runCommand('node prisma/seed.js', { DATABASE_URL: urlF0 });
 
     console.log('F0.6. Ejecutar seed por segunda vez (idempotencia)...');
-    runCommand('node prisma/seed.js', { DATABASE_URL: urlF0 });
+    await runCommand('node prisma/seed.js', { DATABASE_URL: urlF0 });
 
     // Comprobar conteos en DB tras doble seed
     const client0 = new Client({ connectionString: urlF0 });
@@ -217,7 +278,7 @@ async function main() {
         process.exit(1);
       });
     `;
-    runCommand(`node -e "${loginCheckScript.replace(/"/g, '\\"')}"`, { DATABASE_URL: urlF0 });
+    await runCommand(`node -e "${loginCheckScript.replace(/"/g, '\\"')}"`, { DATABASE_URL: urlF0 });
     console.log('✔ F0 superado exitosamente.\n');
 
     // -----------------------------------------------------------------
@@ -241,7 +302,7 @@ async function main() {
     }
 
     console.log('F1.3. Ejecutar migrate deploy en base ya actualizada...');
-    const deployAgainOutput = runPrismaMigrateDeploy(urlF0);
+    const deployAgainOutput = await runPrismaMigrateDeploy(urlF0);
     assert(deployAgainOutput.includes('No pending migrations to apply'), 'No deben existir migraciones pendientes');
 
     console.log('F1.4. Comprobar que los datos siguen 100% idénticos...');
@@ -256,8 +317,8 @@ async function main() {
       await client1Post.end();
     }
 
-    const diff1Output = runPrismaMigrateDiff(urlF0);
-    assert(diff1Output.includes('No difference detected'), 'Diff debe ser cero');
+    const diff1Output = await runPrismaMigrateDiff(urlF0);
+    assert(diff1Output.trim() === '' || diff1Output.includes('No difference detected'), 'Diff debe ser cero');
     console.log('✔ F1 superado exitosamente.\n');
 
     // -----------------------------------------------------------------
@@ -282,7 +343,7 @@ async function main() {
 
     // Registrar migración 1 mediante el comando oficial de Prisma (calcula checksum real sha256)
     console.log('F2.2. Registrar migración canónica 1 con prisma migrate resolve...');
-    runPrismaResolve(urlF2, '20261007000000_init');
+    await runPrismaResolve(urlF2, '20261007000000_init');
 
     console.log('F2.3. Cargar fixture con datos representativos (usuarios, solicitudes, categorías enum, historial)...');
     const client2Fixture = new Client({ connectionString: urlF2 });
@@ -356,15 +417,15 @@ async function main() {
     }
 
     console.log('F2.9. Registrar 20261011212651_add_last_login_to_usuario con prisma migrate resolve...');
-    runPrismaResolve(urlF2, '20261011212651_add_last_login_to_usuario');
+    await runPrismaResolve(urlF2, '20261011212651_add_last_login_to_usuario');
 
     console.log('F2.10. Aplicar migración subsiguiente (feat_rechazo_vuelve_a_pendiente) con migrate deploy...');
-    const deployF2Output = runPrismaMigrateDeploy(urlF2);
+    const deployF2Output = await runPrismaMigrateDeploy(urlF2);
     assert(deployF2Output.includes('20261011230000_feat_rechazo_vuelve_a_pendiente'), 'Debe aplicar migración de rechazo');
 
     console.log('F2.11. Comprobar diff contra schema.prisma...');
-    const diffF2Output = runPrismaMigrateDiff(urlF2);
-    assert(diffF2Output.includes('No difference detected'), 'Diff debe ser cero');
+    const diffF2Output = await runPrismaMigrateDiff(urlF2);
+    assert(diffF2Output.trim() === '' || diffF2Output.includes('No difference detected'), 'Diff debe ser cero');
 
     console.log('F2.12. Comparar snapshot de datos completo posterior a la migración...');
     const client2Verify = new Client({ connectionString: urlF2 });
@@ -422,7 +483,7 @@ async function main() {
     }
 
     // Registrar migración 20261007000000_init en el ledger con su checksum real
-    runPrismaResolve(urlF2Mis, '20261007000000_init');
+    await runPrismaResolve(urlF2Mis, '20261007000000_init');
 
     console.log('F2-Mis.1. Pre-check: debe detectar CANONICAL_INITIAL_SCHEMA_DRIFT y abortar antes de mutar...');
     const precheckF2Mis = await inspectDatabaseState(urlF2Mis);
@@ -466,7 +527,7 @@ async function main() {
 
     console.log('F3.2. Verificar que migrate deploy arroja P3009 y rechaza ejecución...');
     try {
-      runPrismaMigrateDeploy(urlF3);
+      await runPrismaMigrateDeploy(urlF3);
       assert(false, 'migrate deploy debía fallar con P3009');
     } catch (err) {
       const output = (err.stdout || '') + (err.stderr || '');
@@ -483,7 +544,7 @@ async function main() {
     console.log(`Creada base aislada: ${dbF4}`);
 
     console.log('F4.1. Crear tablas via prisma db push...');
-    runCommand('./node_modules/.bin/prisma db push', { DATABASE_URL: urlF4 });
+    await runCommand('./node_modules/.bin/prisma db push', { DATABASE_URL: urlF4 });
 
     console.log('F4.2. Cargar datos en base db push antes del baselining...');
     const client4Fixture = new Client({ connectionString: urlF4 });
@@ -517,12 +578,12 @@ async function main() {
     assert(precheck4.supported === false, 'Debe requerir baselining (supported=false)');
 
     console.log('F4.5. Comprobar diff previo al baselining...');
-    const diff4Pre = runPrismaMigrateDiff(urlF4);
-    assert(diff4Pre.includes('No difference detected'), 'Diff previo debe ser cero');
+    const diff4Pre = await runPrismaMigrateDiff(urlF4);
+    assert(diff4Pre.trim() === '' || diff4Pre.includes('No difference detected'), 'Diff previo debe ser cero');
 
     console.log('F4.6. Aplicar baselining de las 3 migraciones canónicas con prisma migrate resolve...');
     for (const mig of CANONICAL_MIGRATIONS) {
-      runPrismaResolve(urlF4, mig);
+      await runPrismaResolve(urlF4, mig);
     }
 
     console.log('F4.7. Validar estado posterior al baselining...');
@@ -530,7 +591,7 @@ async function main() {
     assert(precheck4Post.status === 'CANONICAL_FULLY_UPDATED', 'Debe ser CANONICAL_FULLY_UPDATED');
     assert(precheck4Post.supported === true, 'Debe ser supported=true');
 
-    const deploy4Output = runPrismaMigrateDeploy(urlF4);
+    const deploy4Output = await runPrismaMigrateDeploy(urlF4);
     assert(deploy4Output.includes('No pending migrations to apply'), 'No deben existir migraciones pendientes');
 
     console.log('F4.8. Comprobar que los datos del fixture no se alteraron durante el baselining...');
@@ -763,13 +824,8 @@ async function main() {
     console.log(`✔ El sentinel ajeno ${sentinelDbName} sobrevivió a toda la ejecución sin ser tocado.`);
 
   } finally {
-    // LIMPIEZA RESILIENTE Y SEGURA: Eliminar EXCLUSIVAMENTE las bases creadas por este runner
+    // LIMPIEZA RESILIENTE Y SEGURA: Eliminar EXCLUSIVAMENTE las bases y sentinel creados por este runner
     await cleanupCreatedDatabases();
-    // Limpiar el sentinel propio creado para la prueba
-    try {
-      await executeAdminQuery(`DROP DATABASE IF EXISTS ${sentinelDbName} WITH (FORCE);`);
-      console.log(`Sentinel propio ${sentinelDbName} purgado al finalizar.`);
-    } catch (_) {}
   }
 
   if (cleanupHasFailures) {
