@@ -68,8 +68,11 @@ asignados sin autorización del usuario.
 - Tiempo real: primero documentar la actualización por consultas autenticadas
   del contrato existente. Agregar SSE/WebSocket requiere una decisión del
   arquitecto y una necesidad concreta; no prometer actualización de la SPA.
-- Entregar commits locales por tarea cuando se soliciten. Push de ramas y PR
-  solo cuando el coordinador los asigne. No hacer merge, publicar servicios,
+- Entregar commits locales por tarea cuando se soliciten. **Todo push a GitHub
+  requiere aprobación explícita del usuario**, para la rama y los commits
+  concretos que se presenten. La revisión del arquitecto o QA no sustituye esa
+  aprobación; tampoco la aprobación de un push anterior. No crear PR que
+  requiera publicar una rama hasta obtenerla. No hacer merge, publicar servicios,
   contratar infraestructura ni cerrar issues sin decisión del coordinador.
 
 ## Evidencia de entrega

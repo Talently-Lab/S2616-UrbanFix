@@ -186,6 +186,79 @@ El frontend se adaptó al contrato del backend (`backend/docs/API_CONTRACT.md`) 
 
 ## Backend
 
-> ⚠️ Sección pendiente: el integrante de BACKEND deberá completar aquí la documentación del backend (tecnología, instalación, variables de entorno y cómo levantar la API).
+API REST para registro y login, perfiles, solicitudes de servicio y administración
+de usuarios. Autentica con JWT y aplica permisos para `CLIENTE`, `TECNICO` y
+`ADMIN`; las solicitudes registran su historial de estados y rechazos individuales.
+
+### Stack
+
+| Componente | Tecnología |
+|------------|------------|
+| Runtime | Node.js, módulos ES; entorno de auditoría: Node 24 |
+| HTTP | Express 5 |
+| Persistencia | PostgreSQL, Prisma 7 y adaptador `@prisma/adapter-pg` |
+| Autenticación | JWT (`jsonwebtoken`) y hash de contraseñas con `bcryptjs` |
+| Validación | Zod 4 |
+| Desarrollo | npm, nodemon y PostgreSQL en Docker |
+
+### Instalación y ejecución
+
+La [guía del backend](./backend/README.md) detalla la preparación de PostgreSQL,
+instalación con `npm ci`, configuración a partir de
+[`backend/.env.example`](./backend/.env.example), generación de Prisma,
+migraciones, seed explícito y arranque con `npm run dev` desde `backend/`.
+
+- API local: `http://localhost:3001/api`.
+- Health local: `http://localhost:3001/health`. Comprueba que responde el proceso;
+  no acredita por sí solo la conexión a PostgreSQL.
+- Contrato de rutas, cuerpos y permisos: [API_CONTRACT.md](./backend/docs/API_CONTRACT.md).
+- Plan de correcciones y dependencias: [BACKEND_PLAN.md](./backend/docs/BACKEND_PLAN.md).
+
+**Estado de las migraciones:** la reparación de instalaciones nuevas y la guía
+de actualización de bases existentes se están validando en la
+[issue #9](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9).
+No ejecutar migraciones a ciegas sobre una base que ya contiene datos.
+La restauración de la suite general `npm test` se sigue en la
+[issue #10](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10).
+
+### Variables de entorno
+
+| Variable | Uso actual |
+|----------|------------|
+| `DATABASE_URL` | Conexión PostgreSQL utilizada por Prisma y el adaptador `pg` |
+| `PORT` | Puerto HTTP; predeterminado `3001` |
+| `JWT_SECRET` | Clave de firma y validación de JWT; usar un valor propio y aleatorio |
+
+El servicio actual fija la duración del token en siete días. La validación
+obligatoria del secreto, la expiración configurable y los orígenes CORS por
+entorno se trabajan en la [issue #11](https://github.com/Talently-Lab/S2616-UrbanFix/issues/11).
+El ejemplo de entorno no debe incluir credenciales reales ni prometer variables
+que todavía no consume la aplicación.
+
+### Cuentas de demostración
+
+Disponibles después de ejecutar explícitamente `npm run db:seed` sobre una base
+de desarrollo o laboratorio:
+
+| Rol | Correo | Contraseña de demostración |
+|-----|--------|----------------------------|
+| Cliente | `juan@mail.com` | `MinimoOchoCaracteres` |
+| Técnico | `carlos@mail.com` | `MinimoOchoCaracteres` |
+| Administrador | `admin@mail.com` | `MinimoOchoCaracteres` |
+
+Estas cuentas son datos de prueba; no ejecutar el seed en una base productiva.
+El registro público crea clientes o técnicos; no crea administradores.
+
+### Demo e integración
+
+**No hay una URL de demo pública verificada.** La publicación de la API se
+gestiona en la [issue #15](https://github.com/Talently-Lab/S2616-UrbanFix/issues/15).
+Cuando exista un despliegue comprobado se agregará su URL y versión aquí.
+
+El backend devuelve el estado actual y los datos del técnico mediante consultas
+autenticadas de solicitudes. La actualización automática de una pantalla depende
+del consumo de esas consultas por el frontend; no hay un canal push implementado.
+Este ciclo de trabajo se limita al backend. **Todo push a GitHub requiere la
+aprobación explícita del usuario**, después de presentar los commits y la evidencia.
 
 </details>
