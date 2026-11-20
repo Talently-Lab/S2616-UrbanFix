@@ -80,6 +80,9 @@ Al iniciar el proceso de la API (`src/index.js`), el módulo `src/config/env.js`
 | `JWT_EXPIRES_IN` | String con unidad explícita (`s`, `m`, `h`, `d`) | Tiempo de validez del JWT (ej. `30s`, `15m`, `1h`, `7d`). Predeterminado: `7d`. No admite enteros sin unidad. |
 | `CORS_ORIGINS` | Lista separada por comas de URLs HTTP(S) | Allowlist de orígenes autorizados para CORS. En `production` es obligatoria y no admite `*` ni `null`. En `development` usa por defecto `http://localhost:5173,http://127.0.0.1:5173`. |
 
+> [!NOTE] Comillas en archivos `.env` y Docker CLI
+> A diferencia del módulo `dotenv` en Node.js, `docker run --env-file` y Docker Compose no eliminan comillas alrededor de los valores. Al definir variables en archivos `.env` consumidos por Docker, los valores deben escribirse sin comillas (por ejemplo, `JWT_SECRET=un_secreto_seguro_minimo_32_chars_123` y no `"..."`), o bien pasarse explícitamente mediante el argumento `-e VARIABLE=valor`.
+
 ### 3.1 Manejo de Caracteres Especiales en Contraseñas (Percent-Encoding)
 Si la contraseña de PostgreSQL contiene caracteres reservados de URL (`@`, `#`, `/`, `:`, `%`, etc., por ejemplo `probe@secret#/`):
 1. **Contenedor PostgreSQL:** Recibe la contraseña cruda sin codificar (ej. `POSTGRES_PASSWORD="probe@secret#/"`).
@@ -254,11 +257,12 @@ curl --fail http://127.0.0.1:3001/ready
 - **Límites y alcance:** `/ready` comprueba la presencia de las tablas y la conectividad activa. **No realiza un análisis exhaustivo de columnas ni verificación de checksums de migraciones** en cada petición HTTP (dicho análisis exhaustivo corresponde al paso de release mediante `npm run db:precheck`).
 - **Comportamiento ante base vacía:** Si las migraciones no han sido aplicadas, devuelve `503 Service Unavailable` con `{ "status": "unavailable", "message": "Esquema de base de datos no preparado" }`.
 - **Comportamiento ante base con 0 filas:** Si la base fue migrada pero aún no contiene registros de usuarios ni solicitudes, responde `200 OK` normalmente (la ausencia de datos no es un error de readiness).
-- **Timeouts acotados de driver y consulta:**
-  - `connectionTimeoutMillis: 5000` en el pool de `PrismaPg`: limita los intentos de adquisición de sockets ante caídas de red o puertos mudos a un máximo de 5 segundos.
-  - `statement_timeout: 5000`: cancela sentencias SQL individuales que superen los 5 segundos.
-  - Con un timeout de cliente HTTP razonable (ej. 6 segundos), el servidor responde `503` de forma determinista antes de que el cliente agote su tiempo de espera, y no se dejan conexiones colgadas en background.
-- **Resiliencia:** Si PostgreSQL se detiene temporalmente, `/ready` devuelve `503`. Al reanudarse PostgreSQL, el pool existente restablece la conexión y `/ready` vuelve a responder `200 OK` de forma automática, sin requerir reinicio del proceso API.
+- **Timeouts acotados de driver y consulta (SLA <= 5s garantizado):**
+  - `connectionTimeoutMillis: 4000` en el pool de `PrismaPg`: limita los intentos de conexión nueva ante caídas de red o puertos mudos a un máximo de 4 segundos.
+  - `query_timeout: 4000` en el pool de `pg`: límite del lado del cliente que aborta la consulta y destruye el socket si el servidor PostgreSQL se suspende, congela o pausa (`docker pause`) sobre un socket ya establecido (warm pool).
+  - `statement_timeout: 4000`: cancela sentencias SQL individuales en el servidor PostgreSQL que superen los 4 segundos.
+  - Al combinarse `query_timeout: 4000` con `connectionTimeoutMillis: 4000`, cualquier congelamiento o caída de la base responde `503 Service Unavailable` de forma determinista en `<= 4s` (respetando estrictamente el SLA de `<= 5s`), expulsando el socket colgado del pool sin dejar tareas colgadas y reanudando el servicio en cuanto la base vuelve a estar disponible.
+- **Resiliencia y autorecuperación:** Si PostgreSQL se detiene o se pausa temporalmente, `/ready` devuelve `503` en `<= 4s`. Al reanudarse PostgreSQL (`docker unpause` o reinicio del contenedor), el pool restablece la conexión y `/ready` vuelve a responder `200 OK` de forma automática, sin requerir reinicio del proceso API.
 - **Confidencialidad:** Las respuestas `503` nunca exponen cadenas de conexión, contraseñas, nombres de tablas ni fragmentos de errores SQL.
 
 ---

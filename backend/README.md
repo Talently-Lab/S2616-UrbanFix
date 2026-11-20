@@ -148,7 +148,7 @@ curl --fail http://localhost:3001/api/auth/login \
 ```
 
 - `/health`: Liveness probe del proceso Node.js (devuelve `status: ok` sin contactar la base).
-- `/ready`: Readiness probe operativo (devuelve `status: ready` y 200 solo si PostgreSQL responde y las tablas requeridas existen físicamente; si falta migración o la base está caída devuelve 503 con límite <=5s).
+- `/ready`: Readiness probe operativo (devuelve `status: ready` y 200 solo si PostgreSQL responde y las tablas requeridas existen físicamente; si falta migración o la base está caída devuelve 503 con límite <=4s y SLA <=5s).
 El login del ejemplo necesita el seed. La respuesta de login contiene `data.usuario` y `data.token`; enviar `Authorization: Bearer <token>` para rutas protegidas.
 
 ## Comandos y pruebas
@@ -236,7 +236,7 @@ docker compose run --rm api npm run db:seed
 - Desde contenedores dentro de Compose: se utiliza `DOCKER_DATABASE_URL` hacia el host interno `db:5432`. Si la contraseña contiene caracteres reservados (`@`, `#`, `/`, `%`), debe codificarse con percent-encoding (ej. `probe%40secret%23%2F`).
 - **Seguridad en Compose:** El servicio `api` no define fallbacks para `JWT_SECRET` ni `DOCKER_DATABASE_URL`; si faltan variables obligatorias, el proceso aborta de forma segura con código 1 antes de escuchar.
 
-**Alcance de las sondas:** `/ready` verifica conectividad activa y existencia de las 4 tablas del modelo en Postgres con timeouts acotados (`<= 5s`). No realiza verificación de drift completo ni checksums en cada petición (dicha verificación corresponde a `db:precheck`). Las sondas locales no certifican aptitud productiva ni pública.
+**Alcance de las sondas:** `/ready` verifica conectividad activa y existencia de las 4 tablas del modelo en Postgres con timeouts acotados en cliente y servidor (`<= 4s`, SLA `<= 5s`). No realiza verificación de drift completo ni checksums en cada petición (dicha verificación corresponde a `db:precheck`). Las sondas locales no certifican aptitud productiva ni pública.
 
 ## Estado de Publicación
 

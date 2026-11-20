@@ -74,7 +74,7 @@ Rutas públicas a nivel de raíz del servidor HTTP (fuera del prefijo `/api`):
 
 #### GET `/ready` (Readiness probe)
 - **Propósito:** Comprueba que el proceso puede atender tráfico productivo verificando conectividad real con PostgreSQL y la presencia física del esquema de tablas de la aplicación (`Usuario`, `SolicitudServicio`, `HistorialEstadoSolicitud`, `RechazoSolicitud`) mediante el singleton del cliente Prisma configurado.
-- **Límite de tiempo:** Acotado mediante timeout de driver y consulta (`<= 5s`). Ante caídas de red o servidor inaccesible, el fallo se reporta de forma determinista sin colgar conexiones en segundo plano.
+- **Límite de tiempo:** Acotado mediante timeout de driver en cliente y servidor (`connectionTimeoutMillis: 4000`, `query_timeout: 4000`, `statement_timeout: 4000`), garantizando respuesta 503 determinista en `<= 4s` (SLA `<= 5s`) ante caídas de red, bases congeladas (`docker pause`) o puertos mudos, sin colgar conexiones en segundo plano ni requerir reinicio de la API al reanudarse la base.
 - **Acceso:** Público. Sujeto a allowlist de CORS.
 - **Respuesta 200 OK (Listo para recibir tráfico):**
   PostgreSQL responde y todas las tablas requeridas existen físicamente en el esquema `public`. La ausencia de filas de datos en una base migrada vacía no es un error.
