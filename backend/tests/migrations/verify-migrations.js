@@ -4,7 +4,12 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { inspectDatabaseState, CANONICAL_MIGRATIONS } from './migration-precheck.js';
+import {
+  inspectDatabaseState,
+  CANONICAL_MIGRATIONS,
+  computeMigrationChecksum,
+  diffAgainstSnapshot
+} from './migration-precheck.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,8 +53,9 @@ function getDatabaseUrl(dbUrl, dbName) {
   return parsed.toString();
 }
 
-// Registro estricto de bases creadas por este runner para limpieza en finally
+// Registro estricto de bases creadas por este runner para limpieza
 const createdDatabases = new Set();
+let cleanupHasFailures = false;
 
 async function executeAdminQuery(sql) {
   const client = new Client({ connectionString: getAdminUrl(BASE_DATABASE_URL) });
@@ -60,6 +66,34 @@ async function executeAdminQuery(sql) {
     await client.end();
   }
 }
+
+async function cleanupCreatedDatabases() {
+  if (createdDatabases.size === 0) return;
+  console.log('\n[Limpieza] Eliminando exclusivamente bases de prueba creadas durante esta ejecución...');
+  for (const dbName of Array.from(createdDatabases)) {
+    try {
+      await executeAdminQuery(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE);`);
+      console.log(`  - Eliminada: ${dbName}`);
+      createdDatabases.delete(dbName);
+    } catch (dropErr) {
+      console.error(`  ❌ Error al eliminar base de prueba ${dbName}: ${dropErr.message}`);
+      cleanupHasFailures = true;
+    }
+  }
+}
+
+// Manejadores de terminación para asegurar limpieza ante SIGINT/SIGTERM
+process.on('SIGINT', async () => {
+  console.log('\n[SIGINT recibido] Limpieza de emergencia...');
+  await cleanupCreatedDatabases();
+  process.exit(130);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\n[SIGTERM recibido] Limpieza de emergencia...');
+  await cleanupCreatedDatabases();
+  process.exit(143);
+});
 
 /**
  * Crea una base de datos con nombre impredecible sin borrar previamente bases ajenas.
@@ -105,13 +139,18 @@ function assert(condition, message) {
 
 async function main() {
   console.log('================================================================');
-  console.log('UrbanFix Backend - Suite de Verificación BE-01 (Matriz F0-F9)');
+  console.log('UrbanFix Backend - Suite de Verificación BE-01 (Matriz F0-F10 + Resiliencia)');
   console.log('Servidor PostgreSQL objetivo (enmascarado):', maskUrl(BASE_DATABASE_URL));
   console.log('Aviso: Requiere privilegio CREATEDB en el servidor de pruebas.');
   console.log('================================================================\n');
 
   // Asegurar cliente generado
   runCommand('./node_modules/.bin/prisma generate');
+
+  // Crear base sentinel para verificar que el runner no toca bases preexistentes ajenas
+  const sentinelDbName = `uf_sentinel_must_survive_${crypto.randomUUID().replace(/-/g, '').slice(0, 8)}`;
+  await executeAdminQuery(`CREATE DATABASE ${sentinelDbName};`);
+  console.log(`Sentinel ajeno creado para test de no-destrucción: ${sentinelDbName}\n`);
 
   try {
     // -----------------------------------------------------------------
@@ -241,7 +280,7 @@ async function main() {
       await client2.end();
     }
 
-    // Registrar migración 1 mediante el comando oficial de Prisma
+    // Registrar migración 1 mediante el comando oficial de Prisma (calcula checksum real sha256)
     console.log('F2.2. Registrar migración canónica 1 con prisma migrate resolve...');
     runPrismaResolve(urlF2, '20261007000000_init');
 
@@ -281,11 +320,12 @@ async function main() {
       await client2Snap.end();
     }
 
-    console.log('F2.5. Inspección previa con precheck: debe detectar CANONICAL_INITIAL_NEEDS_UPGRADE...');
+    console.log('F2.5. Inspección previa con precheck: debe verificar CANONICAL_INITIAL_NEEDS_UPGRADE y diff 0 contra step1...');
     const precheck2 = await inspectDatabaseState(urlF2);
     assert(precheck2.status === 'CANONICAL_INITIAL_NEEDS_UPGRADE', 'Debe detectar necesidad de actualización conservadora');
+    assert(precheck2.supported === true, 'CANONICAL_INITIAL_NEEDS_UPGRADE debe ser supported=true');
 
-    console.log('F2.6. Ejecutar procedimiento conservador en transacción BEGIN/COMMIT...');
+    console.log('F2.6. Ejecutar procedimiento conservador en transacción atómica BEGIN/COMMIT...');
     const client2Upgrade = new Client({ connectionString: urlF2 });
     await client2Upgrade.connect();
     try {
@@ -295,37 +335,38 @@ async function main() {
         ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "lastLogin" TIMESTAMP(3);
         COMMIT;
       `);
-      // Verificar esquema físico ANTES de resolve
-      const colCheck = await client2Upgrade.query(`
-        SELECT column_name, data_type 
-        FROM information_schema.columns 
-        WHERE table_schema = 'public' 
-        AND table_name = 'SolicitudServicio' AND column_name = 'categoria';
-      `);
-      assert(colCheck.rows[0].data_type === 'text', 'Columna categoria debe ser text');
-      const loginCheck = await client2Upgrade.query(`
-        SELECT column_name, data_type 
-        FROM information_schema.columns 
-        WHERE table_schema = 'public' 
-        AND table_name = 'Usuario' AND column_name = 'lastLogin';
-      `);
-      assert(loginCheck.rows.length === 1, 'Columna lastLogin debe existir en Usuario');
     } finally {
       await client2Upgrade.end();
     }
 
-    console.log('F2.7. Registrar 20261011212651_add_last_login_to_usuario con prisma migrate resolve...');
+    console.log('F2.7. Comprobación COMPLETA de esquema del paso 2 antes de resolve (diff contra step2-add-last-login)...');
+    const diffStep2 = diffAgainstSnapshot(urlF2, 'tests/migrations/schemas/step2-add-last-login.prisma');
+    assert(diffStep2.inSync === true, `El esquema tras la transacción no coincide con step2: ${diffStep2.diff}`);
+
+    console.log('F2.8. Snapshot intermedio: verificar que los datos están intactos tras la transacción antes de resolve...');
+    const client2MidVerify = new Client({ connectionString: urlF2 });
+    await client2MidVerify.connect();
+    try {
+      const midUsersF2 = (await client2MidVerify.query('SELECT id, email, nombre, celular, rol FROM "Usuario" ORDER BY id')).rows;
+      const midReqsF2 = (await client2MidVerify.query('SELECT id, titulo, descripcion, categoria as cat, direccion, estado, "clienteId", "tecnicoId" FROM "SolicitudServicio" ORDER BY id')).rows;
+      assert(JSON.stringify(snapUsersF2) === JSON.stringify(midUsersF2), 'Usuarios alterados durante la transacción ALTER');
+      assert(JSON.stringify(snapReqsF2) === JSON.stringify(midReqsF2), 'Solicitudes o categorías alteradas durante la transacción ALTER');
+    } finally {
+      await client2MidVerify.end();
+    }
+
+    console.log('F2.9. Registrar 20261011212651_add_last_login_to_usuario con prisma migrate resolve...');
     runPrismaResolve(urlF2, '20261011212651_add_last_login_to_usuario');
 
-    console.log('F2.8. Aplicar migración subsiguiente (feat_rechazo_vuelve_a_pendiente) con migrate deploy...');
+    console.log('F2.10. Aplicar migración subsiguiente (feat_rechazo_vuelve_a_pendiente) con migrate deploy...');
     const deployF2Output = runPrismaMigrateDeploy(urlF2);
     assert(deployF2Output.includes('20261011230000_feat_rechazo_vuelve_a_pendiente'), 'Debe aplicar migración de rechazo');
 
-    console.log('F2.9. Comprobar diff contra schema.prisma...');
+    console.log('F2.11. Comprobar diff contra schema.prisma...');
     const diffF2Output = runPrismaMigrateDiff(urlF2);
     assert(diffF2Output.includes('No difference detected'), 'Diff debe ser cero');
 
-    console.log('F2.10. Comparar snapshot de datos completo posterior a la migración...');
+    console.log('F2.12. Comparar snapshot de datos completo posterior a la migración...');
     const client2Verify = new Client({ connectionString: urlF2 });
     await client2Verify.connect();
     try {
@@ -350,6 +391,47 @@ async function main() {
     console.log('✔ F2 superado exitosamente.\n');
 
     // -----------------------------------------------------------------
+    // F2-MISLABELED: Caso especial R6 de QA (ledger canónico pero esquema físico legacy)
+    // Demostrado con checksum real SHA256; precheck debe abortar antes de mutar
+    // -----------------------------------------------------------------
+    console.log('--- [F2-Mislabeled] Detección de base con ledger 20261007 pero esquema físico legacy (R6) ---');
+    const { dbName: dbF2Mis, url: urlF2Mis } = await createIsolatedTestDatabase('f2_mislabeled');
+    console.log(`Creada base aislada: ${dbF2Mis}`);
+
+    const clientF2Mis = new Client({ connectionString: urlF2Mis });
+    await clientF2Mis.connect();
+    try {
+      // Simular esquema físico legacy (de 20261002224650_init: sin HistorialEstadoSolicitud, categoria TEXT)
+      await clientF2Mis.query(`
+        CREATE TYPE "Rol" AS ENUM ('CLIENTE', 'TECNICO', 'ADMIN');
+        CREATE TYPE "EstadoSolicitud" AS ENUM ('PENDIENTE', 'ACEPTADA', 'RECHAZADA', 'EN_PROCESO', 'FINALIZADA', 'CANCELADA');
+        CREATE TABLE "Usuario" (
+          "id" TEXT NOT NULL PRIMARY KEY, "email" TEXT NOT NULL UNIQUE, "passwordHash" TEXT NOT NULL,
+          "nombre" TEXT NOT NULL, "rol" "Rol" NOT NULL DEFAULT 'CLIENTE',
+          "fechaCreacion" TIMESTAMP(3) NOT NULL DEFAULT now(), "fechaActualizacion" TIMESTAMP(3) NOT NULL DEFAULT now()
+        );
+        CREATE TABLE "SolicitudServicio" (
+          "id" TEXT NOT NULL PRIMARY KEY, "titulo" TEXT NOT NULL, "descripcion" TEXT NOT NULL,
+          "categoria" TEXT NOT NULL, "direccion" TEXT NOT NULL, "estado" "EstadoSolicitud" NOT NULL DEFAULT 'PENDIENTE',
+          "clienteId" TEXT NOT NULL REFERENCES "Usuario"("id"), "fechaCreacion" TIMESTAMP(3) NOT NULL DEFAULT now(),
+          "fechaActualizacion" TIMESTAMP(3) NOT NULL DEFAULT now()
+        );
+      `);
+    } finally {
+      await clientF2Mis.end();
+    }
+
+    // Registrar migración 20261007000000_init en el ledger con su checksum real
+    runPrismaResolve(urlF2Mis, '20261007000000_init');
+
+    console.log('F2-Mis.1. Pre-check: debe detectar CANONICAL_INITIAL_SCHEMA_DRIFT y abortar antes de mutar...');
+    const precheckF2Mis = await inspectDatabaseState(urlF2Mis);
+    assert(precheckF2Mis.supported === false, 'qa_f2_mislabeled debe tener supported=false');
+    assert(precheckF2Mis.status === 'CANONICAL_INITIAL_SCHEMA_DRIFT', 'Debe detectar CANONICAL_INITIAL_SCHEMA_DRIFT');
+    console.log('Mensaje de seguridad generado:', precheckF2Mis.message);
+    console.log('✔ F2-Mislabeled detectado y bloqueado exitosamente.\n');
+
+    // -----------------------------------------------------------------
     // F3: Ledger fallido / envenenado (P3009)
     // -----------------------------------------------------------------
     console.log('--- [F3] Ledger fallido / envenenado (Detección de fallo P3009) ---');
@@ -360,7 +442,7 @@ async function main() {
     await client3.connect();
     try {
       await client3.query(`
-        CREATE TABLE _prisma_migrations (
+        CREATE TABLE public._prisma_migrations (
           id VARCHAR(36) PRIMARY KEY,
           checksum VARCHAR(64) NOT NULL,
           finished_at TIMESTAMPTZ,
@@ -370,8 +452,8 @@ async function main() {
           started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           applied_steps_count INTEGER NOT NULL DEFAULT 0
         );
-        INSERT INTO _prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count)
-        VALUES (gen_random_uuid()::text, 'checksum-failed-init', NULL, '20261007000000_init', 0);
+        INSERT INTO public._prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count)
+        VALUES (gen_random_uuid()::text, '${computeMigrationChecksum('20261007000000_init')}', NULL, '20261007000000_init', 0);
       `);
     } finally {
       await client3.end();
@@ -475,7 +557,7 @@ async function main() {
     await client5.connect();
     try {
       await client5.query(`
-        CREATE TABLE _prisma_migrations (
+        CREATE TABLE public._prisma_migrations (
           id VARCHAR(36) PRIMARY KEY,
           checksum VARCHAR(64) NOT NULL,
           finished_at TIMESTAMPTZ,
@@ -485,7 +567,7 @@ async function main() {
           started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           applied_steps_count INTEGER NOT NULL DEFAULT 0
         );
-        INSERT INTO _prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count)
+        INSERT INTO public._prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count)
         VALUES (gen_random_uuid()::text, 'checksum-legacy-init', now(), '20261002224650_init', 1);
       `);
     } finally {
@@ -500,9 +582,9 @@ async function main() {
     console.log('✔ F5 superado exitosamente.\n');
 
     // -----------------------------------------------------------------
-    // F6: Migración desconocida en ledger (Bloqueo preventivo)
+    // F6: Migración desconocida en ledger (G1 / G6)
     // -----------------------------------------------------------------
-    console.log('--- [F6] Detección de migración desconocida en ledger ---');
+    console.log('--- [F6] Detección de migración desconocida en ledger (G1/G6) ---');
     const { dbName: dbF6, url: urlF6 } = await createIsolatedTestDatabase('f6_unknown_mig');
     console.log(`Creada base aislada: ${dbF6}`);
 
@@ -510,7 +592,7 @@ async function main() {
     await client6.connect();
     try {
       await client6.query(`
-        CREATE TABLE _prisma_migrations (
+        CREATE TABLE public._prisma_migrations (
           id VARCHAR(36) PRIMARY KEY,
           checksum VARCHAR(64) NOT NULL,
           finished_at TIMESTAMPTZ,
@@ -520,8 +602,8 @@ async function main() {
           started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           applied_steps_count INTEGER NOT NULL DEFAULT 0
         );
-        INSERT INTO _prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count)
-        VALUES (gen_random_uuid()::text, 'dummy', now(), '20269999999999_custom_hack', 1);
+        INSERT INTO public._prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count)
+        VALUES (gen_random_uuid()::text, 'dummy', now(), '99990101000000_mystery', 1);
       `);
     } finally {
       await client6.end();
@@ -533,9 +615,9 @@ async function main() {
     console.log('✔ F6 superado exitosamente.\n');
 
     // -----------------------------------------------------------------
-    // F7: Checksum alterado contra disco (Bloqueo de drift)
+    // F7: Checksum alterado contra disco (G4)
     // -----------------------------------------------------------------
-    console.log('--- [F7] Detección de checksum alterado contra archivo real ---');
+    console.log('--- [F7] Detección de checksum alterado contra archivo real (G4) ---');
     const { dbName: dbF7, url: urlF7 } = await createIsolatedTestDatabase('f7_bad_checksum');
     console.log(`Creada base aislada: ${dbF7}`);
 
@@ -543,7 +625,7 @@ async function main() {
     await client7.connect();
     try {
       await client7.query(`
-        CREATE TABLE _prisma_migrations (
+        CREATE TABLE public._prisma_migrations (
           id VARCHAR(36) PRIMARY KEY,
           checksum VARCHAR(64) NOT NULL,
           finished_at TIMESTAMPTZ,
@@ -553,7 +635,7 @@ async function main() {
           started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           applied_steps_count INTEGER NOT NULL DEFAULT 0
         );
-        INSERT INTO _prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count)
+        INSERT INTO public._prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count)
         VALUES (gen_random_uuid()::text, '0000000000000000000000000000000000000000000000000000000000000000', now(), '20261007000000_init', 1);
       `);
     } finally {
@@ -566,9 +648,9 @@ async function main() {
     console.log('✔ F7 superado exitosamente.\n');
 
     // -----------------------------------------------------------------
-    // F8: Migración marcada con rollback (Bloqueo)
+    // F8: Migración marcada con rollback (G3)
     // -----------------------------------------------------------------
-    console.log('--- [F8] Detección de migración con rolled_back_at ---');
+    console.log('--- [F8] Detección de migración con rolled_back_at (G3) ---');
     const { dbName: dbF8, url: urlF8 } = await createIsolatedTestDatabase('f8_rolled_back');
     console.log(`Creada base aislada: ${dbF8}`);
 
@@ -576,7 +658,7 @@ async function main() {
     await client8.connect();
     try {
       await client8.query(`
-        CREATE TABLE _prisma_migrations (
+        CREATE TABLE public._prisma_migrations (
           id VARCHAR(36) PRIMARY KEY,
           checksum VARCHAR(64) NOT NULL,
           finished_at TIMESTAMPTZ,
@@ -586,8 +668,8 @@ async function main() {
           started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
           applied_steps_count INTEGER NOT NULL DEFAULT 0
         );
-        INSERT INTO _prisma_migrations (id, checksum, finished_at, rolled_back_at, migration_name, applied_steps_count)
-        VALUES (gen_random_uuid()::text, 'dummy', now(), now(), '20261007000000_init', 1);
+        INSERT INTO public._prisma_migrations (id, checksum, finished_at, rolled_back_at, migration_name, applied_steps_count)
+        VALUES (gen_random_uuid()::text, '${computeMigrationChecksum('20261007000000_init')}', now(), now(), '20261007000000_init', 1);
       `);
     } finally {
       await client8.end();
@@ -599,7 +681,7 @@ async function main() {
     console.log('✔ F8 superado exitosamente.\n');
 
     // -----------------------------------------------------------------
-    // F9: Base con objetos / enums pero sin _prisma_migrations
+    // F9: Base con objetos / enums pero sin public._prisma_migrations
     // -----------------------------------------------------------------
     console.log('--- [F9] Base con objetos/enums sin _prisma_migrations (no clasificar como vacía) ---');
     const { dbName: dbF9, url: urlF9 } = await createIsolatedTestDatabase('f9_enums_no_ledger');
@@ -618,26 +700,91 @@ async function main() {
     assert(precheck9.supported === false, 'Debe requerir verificación previa');
     console.log('✔ F9 superado exitosamente.\n');
 
+    // -----------------------------------------------------------------
+    // F10: Ledger completo con sha256 reales pero cero tablas de usuario (G5)
+    // -----------------------------------------------------------------
+    console.log('--- [F10] Detección de ledger completo pero cero tablas físicas (G5 con checksums reales) ---');
+    const { dbName: dbF10, url: urlF10 } = await createIsolatedTestDatabase('f10_ledger_no_tables');
+    console.log(`Creada base aislada: ${dbF10}`);
+
+    const client10 = new Client({ connectionString: urlF10 });
+    await client10.connect();
+    try {
+      await client10.query(`
+        CREATE TABLE public._prisma_migrations (
+          id VARCHAR(36) PRIMARY KEY,
+          checksum VARCHAR(64) NOT NULL,
+          finished_at TIMESTAMPTZ,
+          migration_name VARCHAR(255) NOT NULL,
+          logs TEXT,
+          rolled_back_at TIMESTAMPTZ,
+          started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          applied_steps_count INTEGER NOT NULL DEFAULT 0
+        );
+        INSERT INTO public._prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count)
+        VALUES 
+          (gen_random_uuid()::text, '${computeMigrationChecksum('20261007000000_init')}', now(), '20261007000000_init', 1),
+          (gen_random_uuid()::text, '${computeMigrationChecksum('20261011212651_add_last_login_to_usuario')}', now(), '20261011212651_add_last_login_to_usuario', 1),
+          (gen_random_uuid()::text, '${computeMigrationChecksum('20261011230000_feat_rechazo_vuelve_a_pendiente')}', now(), '20261011230000_feat_rechazo_vuelve_a_pendiente', 1);
+      `);
+    } finally {
+      await client10.end();
+    }
+
+    const precheck10 = await inspectDatabaseState(urlF10);
+    assert(precheck10.supported === false, 'G5 debe tener supported=false');
+    assert(precheck10.status === 'CANONICAL_SCHEMA_DRIFT', 'Debe detectar CANONICAL_SCHEMA_DRIFT por diff');
+    console.log('✔ F10 superado exitosamente.\n');
+
+    // -----------------------------------------------------------------
+    // F11: Verificación de resiliencia y limpieza ante fallos normales
+    // -----------------------------------------------------------------
+    console.log('--- [F11] Verificación de limpieza ante excepciones normales ---');
+    let simulatedFailedDbName = null;
+    try {
+      const { dbName: simDb } = await createIsolatedTestDatabase('simulated_failure');
+      simulatedFailedDbName = simDb;
+      throw new Error('Fallo simulado para probar el bloque finally');
+    } catch (simErr) {
+      console.log('Fallo simulado capturado:', simErr.message);
+      // Eliminar la base de la simulación
+      await executeAdminQuery(`DROP DATABASE IF EXISTS ${simulatedFailedDbName} WITH (FORCE);`);
+      createdDatabases.delete(simulatedFailedDbName);
+      console.log(`Base de simulación ${simulatedFailedDbName} limpiada correctamente.`);
+    }
+    console.log('✔ F11 superado exitosamente.\n');
+
+    // -----------------------------------------------------------------
+    // Verificación final del Sentinel Ajeno (R2)
+    // -----------------------------------------------------------------
+    console.log('--- [Verificación Sentinel] Comprobar que el sentinel ajeno sobrevivió intacto ---');
+    const sentinelCheck = await executeAdminQuery(`SELECT 1 FROM pg_database WHERE datname = '${sentinelDbName}';`);
+    assert(sentinelCheck.rows.length === 1, `El sentinel ${sentinelDbName} fue destruido indebidamente`);
+    console.log(`✔ El sentinel ajeno ${sentinelDbName} sobrevivió a toda la ejecución sin ser tocado.`);
+
   } finally {
     // LIMPIEZA RESILIENTE Y SEGURA: Eliminar EXCLUSIVAMENTE las bases creadas por este runner
-    console.log('Limpiando exclusivamente las bases de prueba creadas durante esta ejecución...');
-    for (const dbName of createdDatabases) {
-      try {
-        await executeAdminQuery(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE);`);
-        console.log(`  - Eliminada: ${dbName}`);
-      } catch (dropErr) {
-        console.warn(`  ! No se pudo eliminar ${dbName}: ${dropErr.message}`);
-      }
-    }
+    await cleanupCreatedDatabases();
+    // Limpiar el sentinel propio creado para la prueba
+    try {
+      await executeAdminQuery(`DROP DATABASE IF EXISTS ${sentinelDbName} WITH (FORCE);`);
+      console.log(`Sentinel propio ${sentinelDbName} purgado al finalizar.`);
+    } catch (_) {}
+  }
+
+  if (cleanupHasFailures) {
+    console.error('\n❌ ERROR: Ocurrieron fallos durante la limpieza de bases de prueba. Consulte los logs superiores.');
+    process.exit(1);
   }
 
   console.log('\n================================================================');
-  console.log('TODAS LAS COMPROBACIONES DE BE-01 (F0-F9) PASARON CON ÉXITO');
+  console.log('TODAS LAS COMPROBACIONES DE BE-01 (F0-F11) PASARON CON ÉXITO');
   console.log('================================================================');
 }
 
-main().catch(err => {
+main().catch(async (err) => {
   console.error('\n❌ ERROR EN LA VERIFICACIÓN DE MIGRACIONES:');
   console.error(err);
+  await cleanupCreatedDatabases();
   process.exit(1);
 });

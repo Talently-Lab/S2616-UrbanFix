@@ -40,26 +40,36 @@ npm run db:precheck
 node tests/migrations/migration-precheck.js --url "postgresql://usuario:pass@localhost:5432/mi_base"
 ```
 
-### 2.2 Códigos de Salida y Criterios
-- **Exit 0 (Soportado):** La base se encuentra en un estado canónico reconocido (`CLEAN_DATABASE`, `CANONICAL_INITIAL_NEEDS_UPGRADE`, `CANONICAL_FULLY_UPDATED`).
-- **Exit 1 (Bloqueado):** Se detectan migraciones legacy espurias (`LEGACY_UNSUPPORTED`), migraciones fallidas (`FAILED_MIGRATION_PENDING`), tablas sin ledger (`DB_PUSH_OR_UNTRACKED_OBJECTS`), migraciones desconocidas (`UNKNOWN_MIGRATIONS_IN_LEDGER`), o discrepancias de checksums contra los archivos en disco (`CHECKSUM_MISMATCH`). **No mutar la base si el precheck sale con error 1.**
+### 2.2 Validación de Integridad Doble (Ledger + Esquema Físico)
+El precheck no se limita a leer nombres de migraciones; realiza una validación exhaustiva:
+1. **Validación de Checksums SHA256 contra disco:** Compara cada checksum registrado en `_prisma_migrations` contra el SHA256 real calculado en tiempo de ejecución del archivo `migration.sql` en disco. Ante cualquier divergencia, reporta `CHECKSUM_MISMATCH` (exit 1).
+2. **Validación de Esquema Físico Real:**
+   - Si el ledger indica `20261007000000_init`, verifica que existan las tablas `Usuario`, `SolicitudServicio` e `HistorialEstadoSolicitud`, y que la columna `SolicitudServicio.categoria` sea del tipo enum `CategoriaServicio`. Si la base tiene un esquema legacy mal etiquetado (`qa_f2_mislabeled`), reporta `CANONICAL_INITIAL_SCHEMA_DRIFT` y bloquea antes de mutar.
+   - Si el ledger indica `CANONICAL_FULLY_UPDATED`, verifica que existan físicamente todas las tablas requeridas. Si el ledger está lleno pero no hay tablas (`G5`), reporta `LEDGER_COMPLETE_BUT_NO_TABLES` (exit 1).
+3. **Bloqueo de Estados Desconocidos y Desordenados:**
+   - Migraciones ajenas/desconocidas: `UNKNOWN_MIGRATIONS_IN_LEDGER` (exit 1).
+   - Migraciones fuera de orden cronológico canónico: `CANONICAL_SEQUENCE_DISORDERED` (exit 1).
+   - Migraciones con rollback registrado: `ROLLED_BACK_MIGRATIONS_IN_LEDGER` (exit 1).
+   - Migraciones fallidas: `FAILED_MIGRATION_PENDING` (exit 1).
 
 ---
 
-## 3. Matriz de Estados de Base de Datos (Fixtures F0 a F9)
+## 3. Matriz de Estados de Base de Datos (Fixtures F0 a F10)
 
 | Fixture | Estado | Pre-check Status | Soporte | Procedimiento Operativo |
 |---|---|---|---|---|
 | **F0** | PostgreSQL Vacío | `CLEAN_DATABASE` | Soportado | `prisma migrate deploy` directo |
 | **F1** | Base canónica al día | `CANONICAL_FULLY_UPDATED` | Soportado | `prisma migrate deploy` no-op idempotente |
 | **F2** | Base canónica inicial con datos (Semana 3) | `CANONICAL_INITIAL_NEEDS_UPGRADE` | Soportado (procedimiento conservador) | Transacción SQL no destructiva + pre-verificación de esquema + `resolve` + `deploy` |
+| **F2-Mis** | Ledger inicial pero esquema legacy | `CANONICAL_INITIAL_SCHEMA_DRIFT` | **Bloqueado** | Abort antes de mutar; corregir discrepancia física antes de resolve |
 | **F3** | Base con ledger fallido (P3009) | `FAILED_MIGRATION_PENDING` | **Bloqueado** | Diagnóstico asistido, rollback o recreación en desarrollo |
 | **F4** | Base con `prisma db push` sin ledger | `DB_PUSH_OR_UNTRACKED_OBJECTS` | Soportado tras diff | Validación estricta con `migrate diff` + baselining ordenado vía `resolve --applied` |
 | **F5** | Base con init legacy duplicada (`20261002...` o `20261005...`) | `LEGACY_UNSUPPORTED` | **Bloqueado** | Abort antes de mutar; recreación limpia en desarrollo o migración forense con backup |
-| **F6** | Migraciones desconocidas en ledger | `UNKNOWN_MIGRATIONS_IN_LEDGER` | **Bloqueado** | Abort antes de mutar; investigar origen de migraciones ajenas |
-| **F7** | Checksum alterado contra disco | `CHECKSUM_MISMATCH` | **Bloqueado** | Abort; indica archivos modificados tras ser aplicados |
-| **F8** | Migración con rollback registrado | `ROLLED_BACK_MIGRATIONS_IN_LEDGER` | **Bloqueado** | Abort; requiere revisión manual de estado |
+| **F6** | Migraciones desconocidas en ledger (G1/G6) | `UNKNOWN_MIGRATIONS_IN_LEDGER` | **Bloqueado** | Abort antes de mutar; investigar origen de migraciones ajenas |
+| **F7** | Checksum alterado contra disco (G4) | `CHECKSUM_MISMATCH` | **Bloqueado** | Abort; indica archivos modificados tras ser aplicados |
+| **F8** | Migración con rollback registrado (G3) | `ROLLED_BACK_MIGRATIONS_IN_LEDGER` | **Bloqueado** | Abort; requiere revisión manual de estado |
 | **F9** | Base con enums/objetos sin ledger | `DB_PUSH_OR_UNTRACKED_OBJECTS` | **Bloqueado** | No se clasifica como vacía; requiere inspección de diff |
+| **F10** | Ledger completo sin tablas físicas (G5) | `LEDGER_COMPLETE_BUT_NO_TABLES` | **Bloqueado** | Abort; indica inconsistencia grave entre metadatos y DDL |
 
 ---
 
@@ -108,6 +118,7 @@ npx prisma migrate deploy
    ```bash
    npm run db:precheck
    # Debe responder CANONICAL_INITIAL_NEEDS_UPGRADE con exit 0.
+   # Si arroja CANONICAL_INITIAL_SCHEMA_DRIFT, ABORTAR (la base no tiene el esquema de semana 3).
    ```
 2. **Generar Backup obligatorio:**
    ```bash
@@ -189,7 +200,7 @@ Si una base contiene registros correspondientes a las migraciones espurias elimi
 
 ## 5. Verificación Automatizada y Regresión
 
-El proyecto incluye una suite automatizada en `backend/tests/migrations/verify-migrations.js` que reproduce y valida exhaustivamente los escenarios F0 a F9.
+El proyecto incluye una suite automatizada en `backend/tests/migrations/verify-migrations.js` que reproduce y valida exhaustivamente los escenarios F0 a F10.
 
 ### 5.1 Requisitos de Laboratorio
 - Instancia de PostgreSQL (versión 16 recomendada).
@@ -206,4 +217,8 @@ docker run -d --name uf-lab-postgres -p 55432:5432 -e POSTGRES_PASSWORD=testpass
 TEST_DATABASE_URL="postgresql://postgres:testpass@localhost:55432/postgres" npm run test:migrations
 ```
 
-El runner crea bases con nombres aleatorios (`uf_<label>_<uuid>`), nunca borra bases previas ajenas, y garantiza la limpieza de todas sus bases temporales creadas en un bloque `finally`, incluso ante fallos de aserción.
+### 5.3 Aislamiento, Limpieza y Manejo de Señales
+- El runner genera nombres de bases impredecibles por corrida (`uf_<label>_<uuid>`).
+- Nunca ejecuta `DROP DATABASE` previo sobre bases ajenas o preexistentes.
+- Registra únicamente las bases creadas exitosamente y las purga en un bloque `finally`, así como mediante manejadores de señales `SIGINT` (Ctrl+C) y `SIGTERM`.
+- **Límite conocido ante SIGKILL:** Ningún proceso en espacio de usuario puede interceptar `SIGKILL` (`kill -9`) ni una caída súbita del host/servidor. En el caso excepcional de una terminación no interceptable por SIGKILL durante una prueba, las bases efímeras huérfanas pueden ser identificadas y eliminadas de forma segura en el servidor de pruebas buscando el prefijo unívoco `uf_*`.
