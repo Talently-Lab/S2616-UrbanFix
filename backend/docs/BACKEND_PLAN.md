@@ -11,8 +11,8 @@ Antigravity. QA independiente: Devin. Arquitectura y coordinación: Codex.
 | ID | Issue | Prioridad | Dependencias | Estado de trabajo |
 | --- | --- | --- | --- | --- |
 | BE-01 | [#9 Reparar migraciones](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9) | P0 | Ninguna | Integrada localmente; QA aprobado en e826df7; sin push ni cierre en GitHub |
-| BE-02 | [#10 Restaurar npm test](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10) | P0 | BE-01 para validación final | Baseline y matriz listos; siguiente implementación de Antigravity; incluye residual M1 de señales del runner |
-| BE-03 | [#11 Entorno, JWT y CORS](https://github.com/Talently-Lab/S2616-UrbanFix/issues/11) | P1 | Coordinar tests con BE-02 | Pendiente |
+| BE-02 | [#10 Restaurar npm test](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10) | P0 | BE-01 para validación final | Integrada localmente; 31 casos HTTP y QA aprobado en 0829fc0; M1 verificado en práctica; sin push ni cierre |
+| BE-03 | [#11 Entorno, JWT y CORS](https://github.com/Talently-Lab/S2616-UrbanFix/issues/11) | P1 | Coordinar tests con BE-02 | Siguiente implementación de Antigravity |
 | BE-04 | [#12 Carreras y transiciones](https://github.com/Talently-Lab/S2616-UrbanFix/issues/12) | P1 | BE-01, BE-02 | Pendiente de reproducción; corregir defectos confirmados |
 | BE-05 | [#13 Contrato y documentación](https://github.com/Talently-Lab/S2616-UrbanFix/issues/13) | P1 | BE-01, BE-02, BE-03, BE-04, BE-06 | README raíz/backend y .env.example completos; falta consolidar contrato y comportamiento final |
 | BE-06 | [#14 Docker y preparación de despliegue](https://github.com/Talently-Lab/S2616-UrbanFix/issues/14) | P1 | BE-01, BE-03 | Pendiente |
@@ -63,3 +63,15 @@ La aprobación técnica y la integración en la rama local no autorizan un push.
 Todo push requiere aprobación explícita del usuario para la rama y los commits
 concretos. Las issues se mantienen abiertas en GitHub mientras sus entregas
 no estén publicadas y verificadas en el destino correspondiente.
+
+## Evidencia de BE-02
+
+La revisión [be-02-review-0829fc0.md](./qa/be-02-review-0829fc0.md) valida
+31 casos HTTP con PostgreSQL migrado, en los modos Docker automático y
+TEST_DATABASE_URL explícita. También cubre instalación sin cliente generado,
+fallo de readiness, fallo de cleanup, ejecución directa sin entorno del harness
+y regresión negativa. Las ventanas de señales probadas no dejaron huérfanos.
+Persiste un límite teórico no reproducido durante CREATE DATABASE en vuelo;
+no se promete limpieza ante SIGKILL o caída del host. El filtro de rol en el
+listado de usuarios no forma parte del requerimiento; la idempotencia del
+seed se verifica en test:migrations, no se duplica en cada corrida HTTP.

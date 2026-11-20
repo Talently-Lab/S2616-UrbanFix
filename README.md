@@ -220,8 +220,13 @@ en esta rama local con aprobación técnica de QA; el push queda pendiente de
 aprobación del usuario. Ver la [guía de migraciones](./backend/docs/MIGRATION_GUIDE.md)
 y el [reporte de validación](./backend/docs/qa/be-01-review-e826df7.md).
 No ejecutar migraciones a ciegas sobre una base que ya contiene datos.
-La restauración de la suite general `npm test` se sigue en la
-[issue #10](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10).
+La suite general `npm test` de la
+[issue #10](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10) también está
+integrada localmente con aprobación técnica de QA: ejecuta 31 casos HTTP sobre
+PostgreSQL aislado, con generación de Prisma, migraciones y seed de laboratorio.
+Requiere Docker disponible o `TEST_DATABASE_URL` hacia un servidor exclusivo de
+pruebas; no utiliza la conexión de desarrollo como fallback. Ver el
+[reporte de QA](./backend/docs/qa/be-02-review-0829fc0.md).
 
 ### Variables de entorno
 
