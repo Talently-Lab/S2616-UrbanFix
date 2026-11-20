@@ -214,9 +214,11 @@ migraciones, seed explícito y arranque con `npm run dev` desde `backend/`.
 - Contrato de rutas, cuerpos y permisos: [API_CONTRACT.md](./backend/docs/API_CONTRACT.md).
 - Plan de correcciones y dependencias: [BACKEND_PLAN.md](./backend/docs/BACKEND_PLAN.md).
 
-**Estado de las migraciones:** la reparación de instalaciones nuevas y la guía
-de actualización de bases existentes se están validando en la
-[issue #9](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9).
+**Estado de las migraciones:** la reparación de la
+[issue #9](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9) está integrada
+en esta rama local con aprobación técnica de QA; el push queda pendiente de
+aprobación del usuario. Ver la [guía de migraciones](./backend/docs/MIGRATION_GUIDE.md)
+y el [reporte de validación](./backend/docs/qa/be-01-review-e826df7.md).
 No ejecutar migraciones a ciegas sobre una base que ya contiene datos.
 La restauración de la suite general `npm test` se sigue en la
 [issue #10](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10).

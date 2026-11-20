@@ -7,7 +7,7 @@ En las revisiones previas del proyecto, la ejecución de `npx prisma migrate dep
 - **Error:** `P3018 / SQLSTATE 42710: ERROR: type "Rol" already exists` en la migración `20261005143951_init`.
 - **Efecto de bloqueo:** Al reintentar, Prisma detectaba una migración fallida en `_prisma_migrations`, arrojando `P3009` (Defecto D2).
 
-Adicionalmente, si una base creada con la migración de semana 3 contenía datos de solicitudes, ejecutar `prisma migrate deploy` directamente fallaba con `SQLSTATE 23502` (`column "categoria" contains null values`) debido a que la migración intermedia aplicaba `DROP COLUMN "categoria", ADD COLUMN "categoria" TEXT NOT NULL`, destruyendo irrevocablemente las categorías preexistentes (Defecto D3).
+Adicionalmente, si una base creada con la migración de semana 3 contenía datos de solicitudes, ejecutar `prisma migrate deploy` directamente fallaba con `SQLSTATE 23502` (`column "categoria" contains null values`) debido a que la migración intermedia aplicaba `DROP COLUMN "categoria", ADD COLUMN "categoria" TEXT NOT NULL` (Defecto D3). PostgreSQL rechaza esa sentencia de forma atómica: en el caso probado las categorías originales sobreviven, pero queda una migración fallida que bloquea los reintentos. El procedimiento conservador evita el fallo y no elimina la columna.
 
 ### 1.2 Causa Raíz
 Al auditar el historial de Git (`git log backend/prisma/migrations` y `git show a1ec432`):
@@ -33,8 +33,11 @@ Para evitar mutaciones ciegas, drift o corrupción, se incluye la utilidad read-
 
 ### 2.1 Ejecución
 ```bash
-# Utilizando la variable DATABASE_URL del entorno:
+# Con DATABASE_URL ya exportada:
 npm run db:precheck
+
+# Alternativa que carga backend/.env desde esta carpeta:
+node --env-file=.env tests/migrations/migration-precheck.js
 
 # O especificando una URL explícita:
 node tests/migrations/migration-precheck.js --url "postgresql://usuario:pass@localhost:5432/mi_base"
@@ -45,7 +48,7 @@ El precheck no se limita a leer nombres de migraciones; realiza una validación 
 1. **Validación de Checksums SHA256 contra disco:** Compara cada checksum registrado en `_prisma_migrations` contra el SHA256 real calculado en tiempo de ejecución del archivo `migration.sql` en disco. Ante cualquier divergencia, reporta `CHECKSUM_MISMATCH` (exit 1).
 2. **Validación de Esquema Físico Real:**
    - Si el ledger indica `20261007000000_init`, verifica que existan las tablas `Usuario`, `SolicitudServicio` e `HistorialEstadoSolicitud`, y que la columna `SolicitudServicio.categoria` sea del tipo enum `CategoriaServicio`. Si la base tiene un esquema legacy mal etiquetado (`qa_f2_mislabeled`), reporta `CANONICAL_INITIAL_SCHEMA_DRIFT` y bloquea antes de mutar.
-   - Si el ledger indica `CANONICAL_FULLY_UPDATED`, verifica que existan físicamente todas las tablas requeridas. Si el ledger está lleno pero no hay tablas (`G5`), reporta `LEDGER_COMPLETE_BUT_NO_TABLES` (exit 1).
+   - Si el ledger indica `CANONICAL_FULLY_UPDATED`, verifica que existan físicamente todas las tablas requeridas. Si el ledger está lleno pero no hay tablas (`G5`), reporta `CANONICAL_SCHEMA_DRIFT` (exit 1).
 3. **Bloqueo de Estados Desconocidos y Desordenados:**
    - Migraciones ajenas/desconocidas: `UNKNOWN_MIGRATIONS_IN_LEDGER` (exit 1).
    - Migraciones fuera de orden cronológico canónico: `CANONICAL_SEQUENCE_DISORDERED` (exit 1).
@@ -69,14 +72,16 @@ El precheck no se limita a leer nombres de migraciones; realiza una validación 
 | **F7** | Checksum alterado contra disco (G4) | `CHECKSUM_MISMATCH` | **Bloqueado** | Abort; indica archivos modificados tras ser aplicados |
 | **F8** | Migración con rollback registrado (G3) | `ROLLED_BACK_MIGRATIONS_IN_LEDGER` | **Bloqueado** | Abort; requiere revisión manual de estado |
 | **F9** | Base con enums/objetos sin ledger | `DB_PUSH_OR_UNTRACKED_OBJECTS` | **Bloqueado** | No se clasifica como vacía; requiere inspección de diff |
-| **F10** | Ledger completo sin tablas físicas (G5) | `LEDGER_COMPLETE_BUT_NO_TABLES` | **Bloqueado** | Abort; indica inconsistencia grave entre metadatos y DDL |
+| **F10** | Ledger completo sin tablas físicas (G5) | `CANONICAL_SCHEMA_DRIFT` | **Bloqueado** | Abort; indica inconsistencia grave entre metadatos y DDL |
 
 ---
 
 ## 4. Procedimientos Operativos Detallados
 
 > [!IMPORTANT]
-> Ejecutar **siempre** `npm run db:precheck` antes de cualquier intervención.
+> Ejecutar **siempre** el precheck antes de intervenir. Los ejemplos de
+> `npm run db:precheck` suponen `DATABASE_URL` exportada. Si está solo en `.env`,
+> usar `node --env-file=.env tests/migrations/migration-precheck.js`.
 
 ### 4.1 Escenario F0: Instalación Vacía (Nuevos Entornos, CI, Docker)
 Apto para bases recién creadas sin tablas ni tipos:
@@ -110,7 +115,7 @@ npx prisma migrate deploy
 ### 4.3 Escenario F2: Base Canónica Inicial con Datos Preexistentes (Semana 3)
 > [!WARNING]
 > **Límite crítico sobre el Defecto D3:**
-> **NO** declarar resuelto el defecto D3 para un `prisma migrate deploy` directo sobre una base inicial poblada. Ejecutar `migrate deploy` directamente sobre una base con solicitudes existentes **fallará con SQLSTATE 23502** y destruiría los datos de categorías.
+> **NO** declarar resuelto el defecto D3 para un `prisma migrate deploy` directo sobre una base inicial poblada. Ejecutar `migrate deploy` directamente sobre una base con solicitudes existentes **fallará con SQLSTATE 23502**. La sentencia fallida se revierte atómicamente y conserva las categorías; el registro fallido de Prisma impide continuar hasta su recuperación.
 > D3 se resuelve **únicamente** siguiendo el procedimiento conservador transaccional previo que se detalla a continuación.
 
 #### Procedimiento Conservador Obligatorio:
@@ -122,7 +127,7 @@ npx prisma migrate deploy
    ```
 2. **Generar Backup obligatorio:**
    ```bash
-   pg_dump -U <usuario> -d <nombre_db> -Fc > backup_pre_upgrade.dump
+   pg_dump -h <host> -p <puerto> -U <usuario> -d <nombre_db> -Fc > backup_pre_upgrade.dump
    ```
 3. **Auditar snapshot de datos antes de la migración:**
    Verificar cantidad y contenido de usuarios, solicitudes y categorías existentes.
@@ -135,14 +140,15 @@ npx prisma migrate deploy
    ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "lastLogin" TIMESTAMP(3);
    COMMIT;
    ```
-5. **Verificar los efectos en el esquema físico ANTES de resolve:**
-   ```sql
-   SELECT column_name, data_type 
-   FROM information_schema.columns 
-   WHERE table_schema = 'public' 
-   AND table_name = 'SolicitudServicio' AND column_name = 'categoria';
-   -- data_type debe ser 'text'
+5. **Verificar el esquema completo del paso 2 y los datos ANTES de resolve:**
+   ```bash
+   npx prisma migrate diff --from-schema tests/migrations/schemas/step2-add-last-login.prisma --to-config-datasource --exit-code
+   # Debe salir con código 0, sin diferencias. Ante cualquier diferencia, ABORTAR.
    ```
+   Esto verifica el estado intermedio completo, incluida `categoria TEXT NOT NULL`
+   y `Usuario.lastLogin TIMESTAMP(3)` nullable. Comparar también el snapshot de
+   usuarios, solicitudes e historial con el previo a la transacción; no registrar
+   la migración como aplicada si difieren datos que debían conservarse.
 6. **Registrar la migración intermedia como aplicada:**
    ```bash
    npx prisma migrate resolve --applied 20261011212651_add_last_login_to_usuario
@@ -205,11 +211,11 @@ El proyecto incluye una suite automatizada en `backend/tests/migrations/verify-m
 ### 5.1 Requisitos de Laboratorio
 - Instancia de PostgreSQL (versión 16 recomendada).
 - Privilegio `CREATEDB` en el usuario de PostgreSQL para permitir la creación de bases efímeras con nombres impredecibles.
-- **Variable obligatoria:** `TEST_DATABASE_URL` (sin fallback a `DATABASE_URL` para garantizar que nunca se toque una base productiva o ajena).
+- **Variable obligatoria:** `TEST_DATABASE_URL`, sin fallback a `DATABASE_URL`. El operador debe comprobar que corresponde a un servidor exclusivo de laboratorio; el nombre de la variable no acredita por sí solo ese aislamiento.
 
 Ejemplo para iniciar un PostgreSQL de laboratorio en Docker en un puerto libre:
 ```bash
-docker run -d --name uf-lab-postgres -p 55432:5432 -e POSTGRES_PASSWORD=testpass postgres:16-alpine
+docker run -d --name uf-lab-postgres -p 127.0.0.1:55432:5432 -e POSTGRES_PASSWORD=testpass postgres:16-alpine
 ```
 
 ### 5.2 Ejecución de la Suite
@@ -217,8 +223,11 @@ docker run -d --name uf-lab-postgres -p 55432:5432 -e POSTGRES_PASSWORD=testpass
 TEST_DATABASE_URL="postgresql://postgres:testpass@localhost:55432/postgres" npm run test:migrations
 ```
 
-### 5.3 Aislamiento, Limpieza y Manejo de Señales
-- El runner genera nombres de bases impredecibles por corrida (`uf_<label>_<uuid>`).
-- Nunca ejecuta `DROP DATABASE` previo sobre bases ajenas o preexistentes.
-- Registra únicamente las bases creadas exitosamente y las purga en un bloque `finally`, así como mediante manejadores de señales `SIGINT` (Ctrl+C) y `SIGTERM`.
-- **Límite conocido ante SIGKILL:** Ningún proceso en espacio de usuario puede interceptar `SIGKILL` (`kill -9`) ni una caída súbita del host/servidor. En el caso excepcional de una terminación no interceptable por SIGKILL durante una prueba, las bases efímeras huérfanas pueden ser identificadas y eliminadas de forma segura en el servidor de pruebas buscando el prefijo unívoco `uf_*`.
+### 5.3 Aislamiento, limpieza y límites de interrupción
+
+- El runner genera nombres impredecibles por corrida (`uf_<label>_<uuid>`) y no borra bases preexistentes para preparar un fixture.
+- Registra las bases creadas y las limpia en `finally` ante excepciones normales, con salida no cero si falla la limpieza.
+- **Residual M1:** QA detectó una carrera entre los handlers de `SIGINT`/`SIGTERM` y el flujo principal; una interrupción puede dejar recursos propios pendientes de limpiar. Su corrección se incorpora al trabajo del runner en #10. No se garantiza limpieza completa por señal en esta revisión.
+- `SIGKILL` y una caída del host no son interceptables. Para recuperar recursos, consultar los nombres exactos registrados en el log de la corrida y comprobar su propiedad antes de eliminarlos en el servidor de laboratorio. El prefijo `uf_` por sí solo no demuestra que una base pertenezca a esa corrida.
+
+La aprobación QA del candidato está en [be-01-review-e826df7.md](./qa/be-01-review-e826df7.md). Solo el usuario puede aprobar un push a GitHub.

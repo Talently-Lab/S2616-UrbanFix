@@ -15,9 +15,9 @@ El modelo relaciona `Usuario`, `SolicitudServicio`, `HistorialEstadoSolicitud` y
 
 ## Estado de instalación
 
-La reparación de migraciones está en revisión en la [issue #9](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9). En la base auditada `95d9587`, las migraciones `20261002224650_init` y `20261005143951_init` duplican la inicial e impiden instalar sobre PostgreSQL vacío. **Usar la revisión reparada y aprobada de #9 antes de preparar el esquema.** Clonar `main` no implica que la corrección ya esté publicada.
+La reparación de la [issue #9](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9) está integrada en esta rama local y cuenta con [aprobación técnica de QA](./docs/qa/be-01-review-e826df7.md). Incluye instalación vacía e idempotente, validación física del esquema y actualización conservadora con datos. **Todavía no fue publicada mediante push**: clonar `main` puede recuperar el historial anterior con migraciones iniciales duplicadas.
 
-En bases existentes, incluso sin las duplicadas, `20261011212651_add_last_login_to_usuario` falla si hay solicitudes cargadas. No ejecutar `migrate deploy`, `reset` ni `resolve` a ciegas: requiere conversión previa de categoría y comprobación de esquema, historial y datos. La guía detallada y `db:precheck` se entregan con #9; no están en todos los checkouts anteriores.
+En bases existentes, `20261011212651_add_last_login_to_usuario` sigue requiriendo un procedimiento previo si hay solicitudes cargadas. Seguir la [guía de migraciones](./docs/MIGRATION_GUIDE.md) antes de aplicar cambios; no ejecutar `reset` ni `resolve` a ciegas. La guía incluye los límites conocidos del runner ante señales de interrupción.
 
 ## Instalación local
 
@@ -82,7 +82,13 @@ npx prisma validate
 npx prisma generate
 ```
 
-**Solo con #9 aprobada y sobre una base vacía verificada:**
+**En esta revisión reparada, solo sobre una base vacía verificada:**
+
+```bash
+node --env-file=.env tests/migrations/migration-precheck.js
+```
+
+Debe indicar `CLEAN_DATABASE` antes de ejecutar:
 
 ```bash
 npm run db:migrate
@@ -139,7 +145,7 @@ Ejecutar desde `backend/`:
 | `npm run db:studio` | Abre Prisma Studio con la base configurada. |
 | `npm test` | Actualmente falla: apunta a `../scripts/test-api.sh`, ausente. Restauración en [#10](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10). |
 
-La revisión #9 añade `db:precheck` y `test:migrations`; consultar su guía para ejecutarlos. El runner exige `TEST_DATABASE_URL` explícita hacia PostgreSQL exclusivo de laboratorio. No apuntarlo a servidores compartidos/productivos. Para un script Node que no carga dotenv por sí mismo, usar `node --env-file=.env <ruta-del-script>` o exportar explícitamente las variables necesarias.
+Están disponibles `db:precheck` y `test:migrations`; consultar la [guía de migraciones](./docs/MIGRATION_GUIDE.md) para ejecutarlos. El runner exige `TEST_DATABASE_URL` explícita hacia PostgreSQL exclusivo de laboratorio. No apuntarlo a servidores compartidos/productivos. Para un script Node que no carga dotenv por sí mismo, usar `node --env-file=.env <ruta-del-script>` o exportar explícitamente las variables necesarias.
 
 Los resultados y limitaciones están en [los reportes de QA](./docs/qa/). Las pruebas de flujos realizadas sobre `db push` no certifican el historial de migraciones.
 
