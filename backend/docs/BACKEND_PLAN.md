@@ -1,4 +1,4 @@
-# Plan de cierre de checkpoints backend
+# Plan de Cierre de Checkpoints Backend
 
 Fecha: 2026-11-20. Base auditada: `95d9587` en `main`.
 Reglas de ejecución y responsabilidades: [AGENTS.md](../../AGENTS.md).
@@ -10,127 +10,34 @@ Antigravity. QA independiente: Devin. Arquitectura y coordinación: Codex.
 
 | ID | Issue | Prioridad | Dependencias | Estado de trabajo |
 | --- | --- | --- | --- | --- |
-| BE-01 | [#9 Reparar migraciones](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9) | P0 | Ninguna | Integrada localmente; QA aprobado en e826df7; push de esta entrega autorizado por usuario; issue abierta |
-| BE-02 | [#10 Restaurar npm test](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10) | P0 | BE-01 para validación final | Integrada localmente; 31 casos HTTP y QA aprobado en 0829fc0; M1 verificado en práctica; push de esta entrega autorizado; issue abierta |
-| BE-03 | [#11 Entorno, JWT y CORS](https://github.com/Talently-Lab/S2616-UrbanFix/issues/11) | P1 | Coordinar tests con BE-02 | Integrada localmente; QA aprobado en 4b1cc2d, 59 tests; sin autorización de nuevo push |
-| BE-04 | [#12 Carreras y transiciones](https://github.com/Talently-Lab/S2616-UrbanFix/issues/12) | P1 | BE-01, BE-02 | Integrada localmente; QA aprobado en 4a1afab, 71 tests; sin aprobación de push |
-| BE-05 | [#13 Contrato y documentación](https://github.com/Talently-Lab/S2616-UrbanFix/issues/13) | P1 | BE-01, BE-02, BE-03, BE-04, BE-06 | Siguiente: consolidar contrato completo y docs; corregir E1/E2 del QA de BE-06 |
-| BE-06 | [#14 Docker y preparación de despliegue](https://github.com/Talently-Lab/S2616-UrbanFix/issues/14) | P1 | BE-01, BE-03 | Implementada localmente; Dockerfile Node 24 slim no-root sin auto-migrate/seed, compose.yaml, GET /ready y timeouts <=5s, 78 tests; pendiente validación QA Devin |
-| BE-07 | [#15 Publicación y verificación pública](https://github.com/Talently-Lab/S2616-UrbanFix/issues/15) | P1 | BE-01 a BE-06, QA aprobado | Excluida por instrucción explícita del usuario; no ejecutar ni pedir infraestructura |
+| BE-01 | [#9 Reparar migraciones](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9) | P0 | Ninguna | Integrada en rama local; QA aprobado en `e826df7`; push de esta entrega autorizado por usuario hasta `e40b9ba`; issue abierta |
+| BE-02 | [#10 Restaurar npm test](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10) | P0 | BE-01 para validación final | Integrada en rama local; 31 casos HTTP y QA aprobado en `0829fc0`; M1 verificado; push de esta entrega autorizado hasta `e40b9ba`; issue abierta |
+| BE-03 | [#11 Entorno, JWT y CORS](https://github.com/Talently-Lab/S2616-UrbanFix/issues/11) | P1 | Coordinar tests con BE-02 | Integrada en rama local; QA aprobado en `4b1cc2d` (59 tests); pendiente autorización de push |
+| BE-04 | [#12 Carreras y transiciones](https://github.com/Talently-Lab/S2616-UrbanFix/issues/12) | P1 | BE-01, BE-02 | Integrada en rama local; QA aprobado en `4a1afab` (71 tests); pendiente autorización de push |
+| BE-06 | [#14 Docker y preparación de despliegue](https://github.com/Talently-Lab/S2616-UrbanFix/issues/14) | P1 | BE-01, BE-03 | Integrada en rama local; QA técnico aprobado en `84d5db6` (78 tests, D1–D4 resueltos); pendiente autorización de push |
+| BE-05 | [#13 Contrato y documentación](https://github.com/Talently-Lab/S2616-UrbanFix/issues/13) | P1 | BE-01 a BE-04, BE-06 | Implementada: consolidación completa de contrato, guías operativas y resolución de notas editoriales E1/E2; sujeta a revisión QA |
+| BE-07 | [#15 Publicación y verificación pública](https://github.com/Talently-Lab/S2616-UrbanFix/issues/15) | P1 | BE-01 a BE-06, QA aprobado | **Excluida por instrucción explícita del usuario**; no ejecutar, ni aprovisionar ni pedir infraestructura |
 
-## Secuencia
+## Secuencia Ejecutada y Estado
 
-1. Antigravity prepara la estrategia de BE-01 y la eleva al arquitecto antes de
-   cambiar historial publicado. Devin reproduce la falla de instalación y de
-   `npm test`, y entrega matriz de aceptación para BE-01/BE-02 en paralelo.
-2. Tras la decisión del arquitecto, Antigravity implementa BE-01. Devin valida
-   el commit entregado y devuelve defectos o aprobación con evidencia.
-3. Antigravity implementa BE-02 y BE-03, seguido de BE-04 y BE-06; Devin valida
-   cada entrega. El arquitecto puede reasignar lotes sin solapar escritura.
-4. Consolidar BE-05 y verificar documentación contra comandos reales.
-5. BE-07 / #15 queda excluida por instrucción explícita del usuario. No publicar
-   ni solicitar información de hosting; finalizar el ciclo con las entregas locales.
+1. **BE-01:** Antigravity implementó la secuencia canónica limpia (eliminando duplicados obsoletos de semanas previas) y la herramienta `db:precheck`. Devin validó los 11 escenarios F0 a F10 en [be-01-review-e826df7.md](./qa/be-01-review-e826df7.md).
+2. **BE-02:** Antigravity restauró el harness de pruebas automatizadas con Docker efímero y teardown reactivo de señales (`SIGINT`/`SIGTERM`, resolución de M1). Devin aprobó 31 casos en [be-02-review-0829fc0.md](./qa/be-02-review-0829fc0.md).
+3. **Pushes autorizados a la fecha:** El usuario autorizó formalmente el push de las entregas de BE-01 y BE-02 hasta el commit `e40b9ba` en la rama `chore/backend-orchestration`. Todo el trabajo posterior reside exclusivamente en la rama de trabajo local.
+4. **BE-03:** Validación sincrónica de entorno en memoria (`src/config/env.js`), obligatoriedad de `JWT_SECRET` (mínimo 32 caracteres, sin fallbacks débiles y rechazando placeholder) y middleware de CORS configurable con allowlist estricta en producción. Devin aprobó 59 casos en [be-03-review-4b1cc2d.md](./qa/be-03-review-4b1cc2d.md).
+5. **BE-04:** Control de concurrencia pesimista con bloqueo de fila `SELECT ... FOR UPDATE` en PostgreSQL para transiciones de estado y bolsa de trabajo. Serialización estricta ante colisiones (un ganador 200 y perdedores 409, sin errores 500). Devin aprobó 71 casos en [be-04-review-4a1afab.md](./qa/be-04-review-4a1afab.md).
+6. **BE-06:** Creación de artefacto Docker reproducible (`node:24-bookworm-slim`, usuario no-root `node`, dependencias por `npm ci`, sin auto-migrate ni auto-seed en arranque), archivo `compose.yaml` local aislado, sonda `/ready` con verificación de esquema y timeouts acotados por fase (`connectionTimeoutMillis: 4000`, `query_timeout: 4000`, `statement_timeout: 4000`), resolviendo defectos D1 a D4. Devin aprobó la entrega en [be-06-review-84d5db6.md](./qa/be-06-review-84d5db6.md) con 78 tests.
+7. **BE-05 (Entrega Actual):** Consolidación exhaustiva del contrato de API ([API_CONTRACT.md](./API_CONTRACT.md)), documentación de instalación y operación ([README.md](../README.md), [DEPLOYMENT.md](./DEPLOYMENT.md), [.env.example](../.env.example)), inventario de rutas completas (incluyendo `/api/admin`, `/api/users/me`, sondas operativas), diferenciación precisa de DTOs, y resolución de las observaciones editoriales E1 (comillas en Compose vs Docker CLI) y E2 (timeouts acotados por fase).
+8. **BE-07 / #15 Excluida:** Por indicación expresa del usuario ("no hagas la 15"), la publicación pública en internet no se ejecuta. El ciclo de desarrollo concluye con la suite local verificada y la documentación consolidada.
 
-Los despachos de Orca son la fuente de verdad del trabajo en ejecución. Una
-issue permanece abierta hasta cumplir sus criterios y la revisión de QA.
+## Evidencia y Métricas de QA Integradas
 
-## Evidencia inicial
+- **Suite de Pruebas HTTP (`npm test`):** 78 casos pasando (100% verde), cubriendo registro, login, usuarios, alias, administración, categorías, solicitudes, bolsa de trabajo, rechazos, concurrencia de transiciones, validación de startup, liveness `/health` y readiness `/ready`.
+- **Suite de Migraciones (`npm run test:migrations`):** 11 fixtures (F0 a F10) con base PostgreSQL limpia, baselining con datos preexistentes de semana 3 mediante procedimiento conservador, diffs de snapshots DDL y mitigación de procesos huérfanos.
+- **Auditoría de Secretos y Confidencialidad:** Las respuestas 503 y los registros de error de configuración nunca exponen contraseñas, URLs de conexión ni consultas SQL internas.
 
-- `npm ci`, `prisma validate` y `prisma generate`: correctos en auditoría.
-- `prisma migrate deploy` con PostgreSQL vacío: falla en
-  `20261005143951_init`, P3018 / SQLSTATE 42710 (`Rol` ya existe).
-- `npm test`: falla porque `../scripts/test-api.sh` no existe.
-- Con `prisma db push` en otra base temporal, 40 peticiones HTTP, aceptación
-  concurrente y preflight CORS local pasaron; esto no valida las migraciones.
-- Seed ejecutado dos veces sin duplicar los registros que crea.
+## Decisiones de Alcance y Límites Técnicos
 
-## Decisiones de alcance
-
-Se conserva el modelo actual `SolicitudServicio` y categoría, sin agregar una
-tabla `Servicio` no utilizada por el contrato. La frescura del estado y del
-técnico se documentará mediante GET autenticado; no se incorpora una tecnología
-de push sin una necesidad acordada.
-
-No se modifican `frontend/`, `data/` ni `qa/`. El cierre completo de tiempo real
-en la SPA, la aprobación del contrato por Frontend y la integración visual
-pública dependen de ese equipo. Los reportes de QA se guardan bajo backend.
-No se presume que exista una base productiva o que sea descartable: toda
-estrategia de migración debe distinguir instalación vacía y base existente.
-
-## Control de publicación
-
-La aprobación técnica y la integración en la rama local no autorizan un push.
-Todo push requiere aprobación explícita del usuario para la rama y los commits
-concretos. Las issues se mantienen abiertas en GitHub mientras sus entregas
-no estén publicadas y verificadas en el destino correspondiente.
-
-## Evidencia de BE-02
-
-La revisión [be-02-review-0829fc0.md](./qa/be-02-review-0829fc0.md) valida
-31 casos HTTP con PostgreSQL migrado, en los modos Docker automático y
-TEST_DATABASE_URL explícita. También cubre instalación sin cliente generado,
-fallo de readiness, fallo de cleanup, ejecución directa sin entorno del harness
-y regresión negativa. Las ventanas de señales probadas no dejaron huérfanos.
-Persiste un límite teórico no reproducido durante CREATE DATABASE en vuelo;
-no se promete limpieza ante SIGKILL o caída del host. El filtro de rol en el
-listado de usuarios no forma parte del requerimiento; la idempotencia del
-seed se verifica en test:migrations, no se duplica en cada corrida HTTP.
-
-## Entrega autorizada por el usuario
-
-El usuario autorizó el commit y push de la entrega actual de BE-01/BE-02 y
-documentación a la rama `chore/backend-orchestration`. BE-03 sigue en su
-workspace de desarrollo y queda fuera de esta publicación. Esta autorización
-no incluye merge a `main`, despliegue ni pushes futuros de nuevas entregas.
-
-## Evidencia de BE-03
-
-La revisión [be-03-review-4b1cc2d.md](./qa/be-03-review-4b1cc2d.md) aprueba
-59 tests y la matriz de migraciones. QA verificó startup inválido, precedencia
-de .env y entorno explícito, JWT real con 15m, rechazo de token expirado, CORS
-permitido/denegado/sin Origin, Vary y ausencia de secretos en errores. Los cambios
-están integrados localmente; la autorización de publicación anterior cubría
-solo BE-01/BE-02. BE-03 y las entregas siguientes requieren aprobación de push.
-
-## Evidencia de BE-04
-
-La revisión [be-04-review-4a1afab.md](./qa/be-04-review-4a1afab.md) aprueba
-71 tests. La primera revisión reprodujo seis fallos concurrentes en el baseline
-y verificó el fix con bloqueos reales de PostgreSQL. La revalidación resuelve la
-falta de DATABASE_URL en la suite con centinelas en otro proceso (cero contactos
-ante variables ausentes/vacías). Se mantienen documentadas las limitaciones de
-las barreras temporizadas de tests y de sus contadores síncronos. La entrega
-está integrada localmente y requiere autorización de push.
-
-## Evidencia de BE-06
-
-Implementación de artefacto operativo y preparación de release (issue #14):
-- `Dockerfile` actualizado a `node:24-bookworm-slim`, usuario no-root (`node`), instalación según `package-lock.json` verificado (`npm ci`), generación determinista de cliente Prisma sin secretos ni dependencias de red en build.
-- `CMD ["node", "src/index.js"]`: arranca exclusivamente el servidor HTTP. Se eliminó la ejecución automática de `prisma migrate deploy` y `prisma/seed.js` al iniciar.
-- Copia selectiva de utilidades de precheck (`tests/migrations/migration-precheck.js` y `tests/migrations/schemas/`) excluyendo suites de tests para mantener la imagen ligera.
-- `.dockerignore` exhaustivo excluyendo `.env`, `.env.*`, logs, git y suites de tests.
-- Endpoint público `GET /ready`: realiza consulta real a PostgreSQL (`prisma.$queryRaw`) comprobando presencia de las tablas de aplicación (`Usuario`, `SolicitudServicio`, `HistorialEstadoSolicitud`, `RechazoSolicitud`). Devuelve `200` si está preparada (la ausencia de filas de datos es válida) y `503` si la base no responde o faltan tablas. Se documenta su límite técnico: no realiza diff exhaustivo ni validación de checksums en cada petición (tarea que corresponde a `db:precheck` en release).
-- Límites de timeout: `connectionTimeoutMillis: 4000`, `query_timeout: 4000` y `statement_timeout: 4000` en adaptador PrismaPg (resolviendo D4), acotando fallos tanto en nuevas conexiones como en sockets ya abiertos de warm pool ante pausas (`docker pause`) a `<= 4s` (SLA `<= 5s`), con purga automática de socket y recuperación limpia sin reiniciar la API.
-- Sonda `GET /health` preservada como liveness del proceso (devuelve `200` incluso con PostgreSQL caído). Ambas sondas integradas bajo política CORS existente y con respuestas 503 estrictamente sanitizadas sin filtrar credenciales ni sentencias SQL.
-- Healthcheck de contenedor integrado usando `node:http` nativo (sin dependencias externas de `curl`).
-- Archivo `backend/compose.yaml` versionado con servicios `db` (Postgres 16 Alpine con healthcheck) y `api`, volumen persistente aislado por proyecto y puertos configurables. Sin fallbacks de `JWT_SECRET` ni secretos inventados en `api`; soporta `DOCKER_DATABASE_URL` con percent-encoding para contraseñas con caracteres especiales.
-- Suite `npm test` ampliada de 71 a 78 tests passing (100% verde), cubriendo liveness, readiness en base migrada, readiness 503 ante falta de esquema, y timeout acotado <= 5s ante PostgreSQL inaccesible.
-- Smoke tests reales ejecutados cubriendo: startup fallido sin variables, password reservada (`probe@secret#/`), flujo homogéneo Compose, flujo directo con red propia, rollback atómico y recuperación automática de readiness.
-- Documento [DEPLOYMENT.md](./DEPLOYMENT.md) y actualizaciones en `README.md`, `.env.example` y `API_CONTRACT.md`. La entrega está integrada localmente y requiere autorización de push.
-
-## Evidencia de BE-06
-
-La revisión [be-06-review-84d5db6.md](./qa/be-06-review-84d5db6.md) aprueba
-78 tests, build no-root, arranque sin DDL/seed, release explícito, contraseñas
-con caracteres reservados y rollback. La pausa de PostgreSQL dio respuestas
-503 alrededor de 4.005–4.012s, liveness200 y recuperación sin reinicio de API.
-Los timeouts son de 4s por fase; la precisión del wording y la diferencia entre
-comillas en Compose y Docker CLI se consolidan en BE-05. No hay despliegue
-público ni autorización de nuevo push.
-
-## Exclusión de BE-07 por el usuario
-
-El usuario indicó «no hagas la 15». No se ejecutará la publicación pública ni
-se investigará/aprovisionará hosting para ella. La consulta previa sobre
-proveedor y origen público del frontend queda sin efecto. BE-05/#13 sigue
-autorizada para consolidar la documentación; no se inventará una URL de demo.
+- **Modelo de datos:** Se mantiene la relación `SolicitudServicio` con categoría sin agregar una tabla `Servicio` redundante.
+- **Tiempo real y SPA:** El refresco y consulta de estado se efectúa mediante consultas GET autenticadas al contrato REST existente. No se agregan tecnologías de push (ni SSE ni WebSockets). El refresco automático de pantalla y la conformidad de diseño continúan como dependencias externas del equipo de Frontend.
+- **Rutas protegidas:** Se prohíbe terminantemente la edición de `frontend/`, `data/`, `qa/`, `AGENTS.md` y `README.md` de la raíz del repositorio.
+- **Control de publicación:** Ningún cambio local posterior a `e40b9ba` ha sido publicado en GitHub. Todo push futuro requiere aprobación explícita del usuario.

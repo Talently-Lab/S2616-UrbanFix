@@ -1,51 +1,63 @@
 # UrbanFix — Backend
 
-API REST para registro/login, perfiles, solicitudes de servicio, asignación de técnicos, historial y administración.
+API REST para registro y autenticación, gestión de perfiles, solicitudes de servicio, bolsa de trabajo y asignación de técnicos, historial cronológico auditado y administración de usuarios.
 
-## Stack y estructura
+## Stack y Estructura
 
-- Node.js con módulos ES; entorno comprobado: Node 24.
-- Express 5, PostgreSQL, Prisma 7 y `@prisma/adapter-pg`.
-- JWT con `jsonwebtoken`, contraseñas con `bcryptjs` y validación con Zod 4.
-- npm y nodemon para desarrollo. QA utiliza PostgreSQL 16.
+- Node.js con módulos ES nativos (`type: "module"`); entorno verificado: Node 24.
+- Express 5, PostgreSQL 16, Prisma 7 y `@prisma/adapter-pg`.
+- Autenticación JWT con `jsonwebtoken`, contraseñas con `bcryptjs` (salt rounds 10) y validación de esquemas con Zod 4.
+- npm para gestión de paquetes y nodemon para desarrollo local. QA y laboratorio utilizan PostgreSQL 16 oficial.
 
-`src/routes/` define rutas, `controllers/` maneja HTTP, `services/` contiene reglas y persistencia, `schemas/` valida entradas, `middlewares/` protege accesos y `config/prisma.js` conecta PostgreSQL. `prisma/` contiene modelo, migraciones y seed; `docs/` contiene contrato y reportes.
+Estructura bajo `backend/`:
+- `src/index.js`: punto de entrada del servidor Express, sondas `/health` y `/ready`, y middleware global de errores.
+- `src/config/`: configuración y validación de variables de entorno (`env.js`) y cliente Prisma con adapter (`prisma.js`).
+- `src/routes/`: definición y montaje de rutas modulares (`auth`, `usuario`, `admin`, `categoria`, `solicitud`).
+- `src/controllers/`: manejo de peticiones HTTP, extracción de datos y respuestas JSON estándar.
+- `src/services/`: reglas de negocio, persistencia relacional, transacciones y control de concurrencia.
+- `src/schemas/`: esquemas de validación de entrada con Zod.
+- `src/middlewares/`: autenticación (`authenticate`), autorización RBAC (`authorize`), validación Zod (`validate`) y CORS (`createCorsMiddleware`).
+- `prisma/`: modelo relacional (`schema.prisma`), migraciones canónicas versionadas y script de seed (`seed.js`).
+- `docs/`: especificación de contrato (`API_CONTRACT.md`), guía de migraciones (`MIGRATION_GUIDE.md`), guía operativa (`DEPLOYMENT.md`) y reportes de QA (`qa/`).
+- `tests/`: suites de integración HTTP (`tests/api/`) y matriz de verificación de ciclo de vida de migraciones (`tests/migrations/`).
 
-El modelo relaciona `Usuario`, `SolicitudServicio`, `HistorialEstadoSolicitud` y `RechazoSolicitud`. El oficio se representa mediante categoría; no existe una tabla `Servicio` independiente.
+El modelo relacional vincula `Usuario`, `SolicitudServicio`, `HistorialEstadoSolicitud` y `RechazoSolicitud`. La especialidad u oficio se representa mediante la categoría de la solicitud; no existe una tabla `Servicio` independiente.
 
-## Estado de instalación
+## Estado de Git y Ramas
 
-La reparación de la [issue #9](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9) está integrada en esta rama local y cuenta con [aprobación técnica de QA](./docs/qa/be-01-review-e826df7.md). Incluye instalación vacía e idempotente, validación física del esquema y actualización conservadora con datos. El usuario autorizó publicar esta entrega en la rama `chore/backend-orchestration`; aún no implica un merge a `main`. Clonar `main` puede recuperar el historial anterior con migraciones iniciales duplicadas. Para probar esta entrega, seleccionar `chore/backend-orchestration`.
+Los únicos commits del backend autorizados y publicados en el repositorio remoto corresponden a las entregas de las issues #9 y #10 hasta el commit `e40b9ba` en la rama `chore/backend-orchestration`.
 
-En bases existentes, `20261011212651_add_last_login_to_usuario` sigue requiriendo un procedimiento previo si hay solicitudes cargadas. Seguir la [guía de migraciones](./docs/MIGRATION_GUIDE.md) antes de aplicar cambios; no ejecutar `reset` ni `resolve` a ciegas. La guía incluye los límites conocidos del runner ante señales de interrupción.
+Todas las implementaciones y validaciones posteriores (BE-03 en `f207fd7`/`18806f6`, BE-04 en `bbcbce2`/`a682f86`, BE-06 en `941c98a`/`bdf4418`/`9311222`, y la presente consolidación BE-05) viven de forma integrada en la rama de trabajo local (`GonzaCarrillo/be-13-api-docs` / `chore/backend-orchestration`). La rama `main` en remoto no contiene este trabajo todavía.
 
-## Instalación local
+> [!IMPORTANT] Control Estricto de Pushes
+> **Todo push a GitHub requiere aprobación explícita del usuario**, especificando la rama y los commits concretos que se presenten. Prohibido ejecutar push, abrir Pull Requests, realizar merge o alterar ramas remotas sin dicha autorización.
 
-Requisitos: Node.js 24 y npm; PostgreSQL 16 accesible (vía Docker, Docker Compose o instalación local). Puertos libres por defecto: `5434` para PostgreSQL y `3001` para API.
+## Instalación y Configuración Local
 
-Se dispone de configuración versionada en `backend/compose.yaml` para levantar PostgreSQL y la API de forma aislada, o se puede usar un contenedor Docker directo.
+Requisitos:
+- Node.js 24 y npm.
+- PostgreSQL 16 accesible (vía Docker, Docker Compose o instalación local).
+- Puertos libres predeterminados: `5434` para PostgreSQL y `3001` para la API HTTP.
 
-### 1. Instalar y configurar
+### 1. Clonar o Ubicar el Repositorio
 
+Si comienzas desde un checkout existente:
 ```bash
-git clone https://github.com/Talently-Lab/S2616-UrbanFix.git
-cd S2616-UrbanFix/backend
+cd backend
 npm ci
-cp .env.example .env
+cp -n .env.example .env
 ```
+*(El modificador `-n` preserva un archivo `.env` previo si ya existía en tu espacio de trabajo).*
 
-Si ya está clonado, comenzar en `backend/` y ejecutar los últimos dos comandos.
+### 2. Base de Datos Local
 
-#### Opción A: Levantar base de datos con Docker Compose (Recomendada)
-
+#### Opción A: Levantar PostgreSQL con Docker Compose (Recomendada)
 ```bash
 docker compose up -d db
 ```
+Inicia PostgreSQL 16 Alpine con comprobación de salud (`pg_isready`) y volumen persistente nombrado `backend_db-data`, exponiendo el puerto `127.0.0.1:5434`.
 
-Inicia PostgreSQL 16 en segundo plano con comprobación de salud (`pg_isready`) y volumen persistente nombrado `backend_db-data`, exponiendo el puerto `127.0.0.1:5434`.
-
-#### Opción B: Crear instancia PostgreSQL directa con Docker
-
+#### Opción B: Contenedor PostgreSQL directo con Docker
 ```bash
 docker run --detach --name urbanfix-postgres-local \
   --publish 127.0.0.1:5434:5432 \
@@ -58,195 +70,184 @@ docker run --detach --name urbanfix-postgres-local \
 docker exec urbanfix-postgres-local pg_isready -U urbanfix -d urbanfix_db
 ```
 
-Continuar cuando responda `accepting connections`. Si el contenedor ya existe, usar `docker start urbanfix-postgres-local`. No eliminar su volumen para corregir errores. Las credenciales son solo locales; si usás otra instancia, adaptar `DATABASE_URL`.
+### 3. Configurar Variables de Entorno
 
-Editar `.env`:
-
-```dotenv
-NODE_ENV=development
-DATABASE_URL="postgresql://urbanfix:urbanfix_pass@localhost:5434/urbanfix_db?schema=public"
-PORT=3001
-JWT_SECRET="reemplazar-por-un-secreto-propio-aleatorio"
-JWT_EXPIRES_IN=7d
-CORS_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
-```
-
-Generar un secreto criptográfico y copiarlo a `JWT_SECRET`:
-
+Generar un secreto criptográfico seguro e insertarlo en la variable `JWT_SECRET` de `.env`:
 ```bash
 node --input-type=module -e "import { randomBytes } from 'node:crypto'; console.log(randomBytes(32).toString('hex'))"
 ```
 
-`.env` está ignorado por Git. Conservar las credenciales reales fuera del repositorio.
+Valores clave en `backend/.env`:
+```dotenv
+NODE_ENV=development
+DATABASE_URL="postgresql://urbanfix:urbanfix_pass@localhost:5434/urbanfix_db?schema=public"
+DOCKER_DATABASE_URL="postgresql://urbanfix:urbanfix_pass@db:5432/urbanfix_db?schema=public"
+PORT=3001
+JWT_SECRET="pegar_el_secreto_generado_de_al_menos_32_caracteres"
+JWT_EXPIRES_IN=7d
+CORS_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
+```
 
-| Variable | Uso actual |
-| --- | --- |
-| `NODE_ENV` | Entorno de ejecución (`development`, `test` o `production`); predeterminado `development`. |
-| `DATABASE_URL` | Conexión PostgreSQL para Prisma CLI y el adaptador de la API (requiere protocolo `postgres`/`postgresql`, host y base); el ejemplo utiliza esquema `public`. |
-| `PORT` | Puerto HTTP (entero entre 1 y 65535); predeterminado `3001`. |
-| `JWT_SECRET` | Firma y validación de tokens JWT. Obligatorio (mínimo 32 caracteres). Se eliminaron todos los fallbacks débiles y se rechaza el placeholder de ejemplo al arrancar. |
-| `JWT_EXPIRES_IN` | Duración del JWT con unidad explícita (`s`, `m`, `h`, `d`, ej. `30m`, `1h`, `7d`); predeterminado `7d`. |
-| `CORS_ORIGINS` | Allowlist de orígenes HTTP(S) separados por comas, sin path ni query. En `development` y `test`, si se omite, usa `http://localhost:5173,http://127.0.0.1:5173`. En `production`, exige una lista explícita no vacía (no admite `*` ni `null`). Peticiones sin `Origin` (curl, health checks, server-to-server) se admiten normalmente. |
-| `TEST_DATABASE_URL` | Variable dedicada para `test:migrations` y opcional para `npm test` (si no se usa Docker automático), hacia un servidor exclusivo de laboratorio con privilegio `CREATEDB`. Por seguridad, nunca se hace fallback automático desde `DATABASE_URL`. |
+| Variable | Tipo / Restricción | Uso y Comportamiento |
+|---|---|---|
+| `NODE_ENV` | `development` \| `test` \| `production` | Entorno de ejecución (predeterminado: `development`). |
+| `DATABASE_URL` | URL PostgreSQL válida | Conexión para Prisma CLI y la API desde el host. Requiere protocolo `postgres:` o `postgresql:`, host y base. |
+| `DOCKER_DATABASE_URL` | URL PostgreSQL con percent-encoding | Conexión interna para contenedores dentro de Compose hacia el host `db:5432`. Si la contraseña contiene caracteres reservados (`@`, `#`, `/`, `%`), debe codificarse según RFC 3986 (ej. `probe%40secret%23%2F`). |
+| `PORT` | Entero entre 1 y 65535 | Puerto HTTP de la API (predeterminado: `3001`). |
+| `JWT_SECRET` | String (mínimo 32 caracteres) | Secreto para firma y verificación de JWT. No tiene fallback; el proceso aborta al arrancar si falta o si mantiene el placeholder de ejemplo. |
+| `JWT_EXPIRES_IN` | Entero con unidad (`s`, `m`, `h`, `d`) | Tiempo de validez del token (ej. `30m`, `1h`, `7d`; predeterminado: `7d`). Se rechazan números sin unidad para evitar ambigüedades. |
+| `CORS_ORIGINS` | Lista separada por comas de URLs HTTP(S) | En `development` y `test` usa por defecto localhost. En `production` exige una lista explícita no vacía (rechaza `*` y `null`). Peticiones sin `Origin` (curl, health probes, server-to-server) se admiten normalmente. |
+| `TEST_DATABASE_URL` | URL PostgreSQL exclusiva | Requerida para `npm run test:migrations` y opcional para `npm test`. Debe apuntar a un servidor de pruebas con privilegio `CREATEDB`. Por seguridad, nunca se hace fallback a `DATABASE_URL`. |
 
-Al arrancar la API (`src/index.js`), la configuración se valida en memoria antes de abrir puertos HTTP o conectar a la base de datos. Si una variable es inválida, el proceso aborta identificando el nombre de la variable sin exponer secretos ni contraseñas de conexión en los registros. Las tareas CLI de Prisma (`validate`, `generate`, `migrate`, `seed` y `db:precheck`) no requieren `JWT_SECRET` ni `CORS_ORIGINS`.
+> [!NOTE] Validación Temprana en Memoria
+> Al arrancar (`src/index.js`), el módulo `src/config/env.js` valida la configuración antes de abrir puertos HTTP o contactar a PostgreSQL. Si alguna variable es inválida, el proceso aborta con código 1 indicando el error de forma limpia, sin exponer secretos ni cadenas de conexión en los logs. Las tareas CLI de Prisma (`validate`, `generate`, `migrate`, `seed` y `db:precheck`) no requieren `JWT_SECRET` ni `CORS_ORIGINS`.
 
-### 2. Preparar Prisma
+### 4. Preparar Esquema y Migraciones
 
 ```bash
 npx prisma validate
 npx prisma generate
 ```
 
-**En esta revisión reparada, solo sobre una base vacía verificada:**
-
+Antes de aplicar cambios, verificar el estado de la base de datos:
 ```bash
-node --env-file=.env tests/migrations/migration-precheck.js
+npm run db:precheck
 ```
+*(Si las variables no están exportadas en la shell, ejecutar `node --env-file=.env tests/migrations/migration-precheck.js`).*
 
-Debe indicar `CLEAN_DATABASE` antes de ejecutar:
+- Si reporta `CLEAN_DATABASE` (base vacía), aplicar las migraciones canónicas:
 
 ```bash
 npm run db:migrate
 ```
+- Si reporta `CANONICAL_INITIAL_NEEDS_UPGRADE` (base existente de semana 3 con datos), **no ejecutar migrate directo**; seguir el procedimiento conservador detallado en la [Guía de Migraciones](./docs/MIGRATION_GUIDE.md).
 
-Para una base con tablas o historial, detenerse y seguir la guía de migraciones de esa revisión. `prisma db push` no sustituye la reparación ni valida las migraciones.
-
-### 3. Datos de demostración, opcionales
-
-Solo sobre una base preparada de desarrollo/laboratorio:
+### 5. Datos de Demostración (Opcional, Solo Laboratorio)
 
 ```bash
 npm run db:seed
 ```
-
-El seed crea cuentas y una solicitud con historial mediante `upsert`. Repetirlo no duplica esos registros ni reemplaza los que ya existen.
+El seed es idempotente (`upsert`); crea tres cuentas de prueba y una solicitud inicial con historial. No altera contraseñas de usuarios que ya existan y **nunca debe ejecutarse en entornos productivos**.
 
 | Rol | Correo | Contraseña inicial de demostración |
-| --- | --- | --- |
-| Cliente | `juan@mail.com` | `MinimoOchoCaracteres` |
-| Técnico | `carlos@mail.com` | `MinimoOchoCaracteres` |
-| Administrador | `admin@mail.com` | `MinimoOchoCaracteres` |
+|---|---|---|
+| `CLIENTE` | `juan@mail.com` | `MinimoOchoCaracteres` |
+| `TECNICO` | `carlos@mail.com` | `MinimoOchoCaracteres` |
+| `ADMIN` | `admin@mail.com` | `MinimoOchoCaracteres` |
 
-Si los correos ya existían con otra contraseña, el seed no la cambia. No ejecutarlo en producción. El registro público solo crea clientes y técnicos; el administrador de esta tabla proviene del seed.
+*Nota:* El registro público (`POST /api/auth/register`) únicamente permite crear usuarios con rol `CLIENTE` o `TECNICO`. Los administradores provienen del seed o de reasignación interna por otro administrador.
 
-### 4. Iniciar y comprobar
+### 6. Iniciar la API y Verificar
 
 ```bash
 npm run dev
 ```
 
-En otra terminal:
-
+En otra terminal, comprobar las sondas operativas y un endpoint público:
 ```bash
 curl --fail http://localhost:3001/health
 curl --fail http://localhost:3001/ready
 curl --fail http://localhost:3001/api/categorias
-curl --fail http://localhost:3001/api/auth/login \
-  --header 'Content-Type: application/json' \
-  --data '{"email":"juan@mail.com","password":"MinimoOchoCaracteres"}'
 ```
 
-- `/health`: Liveness probe del proceso Node.js (devuelve `status: ok` sin contactar la base).
-- `/ready`: Readiness probe operativo (devuelve `status: ready` y 200 solo si PostgreSQL responde y las tablas requeridas existen físicamente; si falta migración o la base está caída devuelve 503 con límite <=4s y SLA <=5s).
-El login del ejemplo necesita el seed. La respuesta de login contiene `data.usuario` y `data.token`; enviar `Authorization: Bearer <token>` para rutas protegidas.
+- `/health` (Liveness): Responde `200 OK` con `{ "status": "ok" }` verificando que el proceso Node.js está activo.
+- `/ready` (Readiness): Responde `200 OK` con `{ "status": "ready" }` solo si PostgreSQL responde y las 4 tablas del modelo existen físicamente. Timeouts acotados por fase (`connectionTimeoutMillis: 4000`, `query_timeout: 4000`, `statement_timeout: 4000`). En mediciones de QA bajo pausa de base de datos (`docker pause`), respondió `503` en ~4.005–4.012s, recuperando automáticamente el servicio al reanudar la base. No realiza verificación de drift completo ni checksums en cada petición (dicho análisis exhaustivo corresponde a `db:precheck`).
 
-## Comandos y pruebas
+---
 
-Ejecutar desde `backend/`:
+## Comandos del Proyecto
 
-| Comando | Función / estado |
-| --- | --- |
-| `npm run dev` | Servidor con recarga mediante nodemon. |
-| `npm start` | Inicia Node sin recarga; no aplica migraciones ni seed. |
-| `npm run db:migrate` | `prisma migrate deploy`; respetar los límites de #9. |
-| `npm run db:seed` / `npm run seed` | Seed explícito de demostración. |
-| `npm run db:studio` | Abre Prisma Studio con la base configurada. |
-| `npm test` | Suite de integración HTTP en `tests/api/runner.js`. Levanta PostgreSQL aislado (Docker efímero `postgres:16-alpine` o `TEST_DATABASE_URL`), aplica migraciones canónicas (`prisma migrate deploy`), seed de laboratorio, API en puerto libre y suite de 78 casos (incluye concurrencia, validación de startup, liveness y readiness). Teardown automático. |
+Todos los comandos se ejecutan desde el directorio `backend/`:
 
-Están disponibles `db:precheck` y `test:migrations`; consultar la [guía de migraciones](./docs/MIGRATION_GUIDE.md) para ejecutarlos. `test:migrations` exige `TEST_DATABASE_URL` explícita hacia PostgreSQL exclusivo de laboratorio con privilegio `CREATEDB`. `npm test` utiliza Docker efímero automáticamente si está disponible, o `TEST_DATABASE_URL` si se especifica; si ninguno está disponible, falla con instrucciones legibles sin tocar `DATABASE_URL`. Para un script Node que no carga dotenv por sí mismo, usar `node --env-file=.env <ruta-del-script>` o exportar explícitamente las variables necesarias.
+| Comando | Función / Propósito |
+|---|---|
+| `npm run dev` | Inicia el servidor HTTP en modo desarrollo con nodemon (recarga automática). |
+| `npm start` | Inicia el servidor HTTP en modo producción (`node src/index.js`); no ejecuta migraciones ni seed. |
+| `npm run db:precheck` | Herramienta de auditoría de solo lectura; valida ledger, checksums SHA-256 y tablas físicas. |
+| `npm run db:migrate` | Ejecuta `prisma migrate deploy` aplicando las migraciones canónicas pendientes. |
+| `npm run db:seed` | Puebla cuentas y registros de demostración en base local de laboratorio. |
+| `npm run db:studio` | Abre interfaz gráfica Prisma Studio contra la base configurada en `DATABASE_URL`. |
+| `npm test` | Suite de 78 pruebas de integración HTTP (`tests/api/runner.js`). Levanta un contenedor efímero PostgreSQL 16 aislado (o utiliza `TEST_DATABASE_URL`), aplica migraciones canónicas, ejecuta suite completa (auth, RBAC, concurrencia, sondas `/health` y `/ready`) y realiza teardown automático. |
+| `npm run test:migrations` | Suite de 11 escenarios de migración (F0 a F10 en `verify-migrations.js`). Requiere `TEST_DATABASE_URL` con privilegios `CREATEDB`. |
 
-Los resultados y limitaciones están en [los reportes de QA](./docs/qa/). Las pruebas de flujos realizadas sobre `db push` no certifican el historial de migraciones.
+---
 
-## Rutas y permisos
+## Rutas y Control de Acceso
 
-El [contrato de API](./docs/API_CONTRACT.md) detalla cuerpos, errores y transiciones. Resumen de la implementación actual:
+Para el detalle completo de cuerpos JSON, parámetros, códigos de error y respuestas, consultar el [Contrato de API](./docs/API_CONTRACT.md).
 
-| Ruta | Acceso |
-| --- | --- |
-| `POST /api/auth/register`, `POST /api/auth/login` | Público; registro solo CLIENTE/TECNICO. |
-| `GET /api/auth/me`, `GET/PATCH /api/usuarios/me` | Usuario autenticado, perfil propio. |
-| `GET /api/categorias` | Público. |
-| `POST /api/solicitudes` | Cliente. |
-| `GET /api/solicitudes`, `GET /api/solicitudes/:id` | Según rol, propiedad, asignación y rechazos. |
-| `PATCH /api/solicitudes/:id` | Cliente dueño, solo PENDIENTE. |
-| `GET /api/solicitudes/:id/historial` | Visibilidad del detalle; oculta rechazos individuales al cliente. |
-| `PATCH /api/solicitudes/:id/aceptar`, `/rechazar` | Técnico, con controles de disponibilidad/rechazo previo. |
-| `PATCH /api/solicitudes/:id/iniciar`, `/finalizar` | Técnico asignado, con transición válida. |
-| `PATCH /api/solicitudes/:id/cancelar` | Cliente dueño o ADMIN, desde PENDIENTE/ACEPTADA. |
-| `GET /api/admin/usuarios`, `GET/PATCH /api/admin/usuarios/:id` | Administrador. |
+| Método y Ruta | Acceso y Permisos | Descripción |
+|---|---|---|
+| `GET /health` | Público | Sonda de liveness del proceso (fuera de `/api`). |
+| `GET /ready` | Público | Sonda de readiness con verificación de PostgreSQL (fuera de `/api`). |
+| `POST /api/auth/register` | Público | Registro de usuarios; solo admite roles `CLIENTE` o `TECNICO`. |
+| `POST /api/auth/login` | Público | Inicio de sesión; actualiza `lastLogin` y emite JWT. |
+| `GET /api/auth/me` | 🔒 Autenticado | Devuelve los datos del usuario autenticado en la sesión actual. |
+| `GET /api/usuarios/me` | 🔒 Autenticado | Perfil del usuario propio (alias idéntico: `GET /api/users/me`). |
+| `PATCH /api/usuarios/me` | 🔒 Autenticado | Actualiza nombre y/o celular propios (alias: `PATCH /api/users/me`). |
+| `GET /api/categorias` | Público | Lista el catálogo de las 8 categorías oficiales de servicio. |
+| `POST /api/solicitudes` | 🔒 `CLIENTE` | Crea una solicitud en estado inicial `PENDIENTE`. |
+| `GET /api/solicitudes` | 🔒 Autenticado | Listado paginado: `CLIENTE` ve las suyas; `TECNICO` ve bolsa disponible `PENDIENTE` (excluyendo las que rechazó) y sus asignadas; `ADMIN` ve todas. |
+| `GET /api/solicitudes/:id` | 🔒 Autenticado | Detalle de solicitud. Si un técnico la rechazó previamente, recibe `403 FORBIDDEN`. |
+| `PATCH /api/solicitudes/:id` | 🔒 `CLIENTE` dueño | Edita campos de la solicitud; restringido exclusivamente a estado `PENDIENTE`. |
+| `GET /api/solicitudes/:id/historial` | 🔒 Autenticado | Historial auditado; oculta acciones de rechazo técnico a los clientes por privacidad. |
+| `PATCH /api/solicitudes/:id/aceptar` | 🔒 `TECNICO` | Transición `PENDIENTE` → `ACEPTADA`; asigna `tecnicoId`. Bloqueado (`409`) si ya la rechazó. |
+| `PATCH /api/solicitudes/:id/rechazar` | 🔒 `TECNICO` | Registra rechazo individual. La solicitud **permanece `PENDIENTE`** para otros técnicos. |
+| `PATCH /api/solicitudes/:id/iniciar` | 🔒 `TECNICO` asignado | Transición `ACEPTADA` → `EN_PROCESO`; fija `fechaInicio`. |
+| `PATCH /api/solicitudes/:id/finalizar` | 🔒 `TECNICO` asignado | Transición `EN_PROCESO` → `FINALIZADA`; fija `fechaFinalizacion`. |
+| `PATCH /api/solicitudes/:id/cancelar` | 🔒 `CLIENTE` dueño o `ADMIN` | Transición `PENDIENTE`/`ACEPTADA` → `CANCELADA` con motivo obligatorio. |
+| `GET /api/admin/usuarios` | 🔒 `ADMIN` | Listado paginado de usuarios (`page`, `limit`). Sin filtro server-side por rol. |
+| `GET /api/admin/usuarios/:id` | 🔒 `ADMIN` | Detalle de usuario por ID. |
+| `PATCH /api/admin/usuarios/:id` | 🔒 `ADMIN` | Actualiza nombre, celular o rol (`CLIENTE`, `TECNICO`, `ADMIN`). |
 
-El administrador filtra solicitudes mediante `GET /api/solicitudes?estado=PENDIENTE` (o el estado requerido). Usuarios soporta paginación `page`/`limit`, sin filtro server-side por rol. `/api/users/me` es alias de `/api/usuarios/me`.
+> [!IMPORTANT] Filtro de Solicitudes para Administradores
+> El filtrado de solicitudes por estado para administradores se realiza mediante `GET /api/solicitudes?estado=PENDIENTE` (o el estado correspondiente). No existe una ruta `/api/admin/solicitudes` separada.
 
-Las acciones sobre una misma solicitud se serializan mediante bloqueo de fila y
-verificación de estado/permisos dentro de la transacción. Una operación que perdió
-su precondición devuelve `409`; los rechazos duplicados no devuelven `500`. Ver
-el [contrato de concurrencia](./docs/API_CONTRACT.md#81-reglas-de-concurrencia-y-serialización-be-04)
-y la [validación QA](./docs/qa/be-04-review-4a1afab.md).
+### Concurrencia y Serialización (BE-04)
 
-Al consultar solicitudes, el cliente recibe estado y datos actuales del técnico. No hay SSE/WebSocket: el refresco automático de pantalla depende del frontend. Este ciclo no modifica `frontend/`, `data/` ni `qa/`.
+Todas las modificaciones de estado sobre solicitudes se ejecutan bajo transacciones con bloqueo de fila `SELECT ... FOR UPDATE`:
+- Dos técnicos aceptando en paralelo: exactamente uno gana (`200 OK`) y el otro recibe `409 CONFLICT`.
+- Rechazos repetidos del mismo técnico devuelven `409 CONFLICT` de forma controlada sin fallar con error 500.
+- La frescura de datos se gestiona mediante consultas GET autenticadas; no existen WebSockets ni SSE. La integración y refresco de pantalla dependen de la aplicación cliente (SPA).
 
-## Docker y Preparación de Despliegue (BE-06)
+---
 
-El artefacto Docker (`backend/Dockerfile`) está construido sobre `node:24-bookworm-slim`, se ejecuta bajo un usuario no-root (`node`), instala dependencias según `package-lock.json` verificado (`npm ci`) y genera Prisma Client de forma determinista sin requerir conectividad de red a bases de datos ni secretos en build.
+## Docker y Preparación Operativa (BE-06)
 
-A diferencia de versiones preliminares, el contenedor arranca **exclusivamente el servidor HTTP** (`node src/index.js`). **No aplica migraciones ni ejecuta seeds automáticamente al iniciar**.
+El contenedor de la API se basa en `backend/Dockerfile`:
+- Imagen base `node:24-bookworm-slim`, ejecutada bajo usuario sin privilegios `USER node`.
+- Instalación de dependencias reproducibles mediante `npm ci` sobre `package-lock.json`.
+- Prisma Client generado en build-time sin requerir acceso de red ni credenciales.
+- El contenedor ejecuta **exclusivamente el servidor HTTP** (`CMD ["node", "src/index.js"]`). **No ejecuta migraciones ni seeds automáticos al arrancar**.
 
-### Flujo Operativo de Release y Despliegue
-
-La preparación del entorno sigue una separación estricta entre el paso previo de preparación de esquema y la ejecución de la API:
-1. **Pre-check de estado:** `npm run db:precheck` (verifica estado `CLEAN_DATABASE` o `CANONICAL_FULLY_UPDATED`).
-2. **Aplicar migraciones:** `npm run db:migrate` (`prisma migrate deploy`).
-3. **Arranque de API:** `npm start` (o inicio del contenedor; supervisado vía `/health` y `/ready`).
-4. **Seed de demostración (exclusivo de laboratorio/demo):** `npm run db:seed`. Nunca debe ejecutarse en bases productivas.
-
-Para la guía detallada de operación, variables, reinicio, rollback y límites técnicos, consultar la [Guía de Despliegue y Operabilidad](./docs/DEPLOYMENT.md).
-
-### Docker Compose Local
-
-Se provee `backend/compose.yaml` con servicios aislados de base de datos (`db`, PostgreSQL 16 Alpine con healthcheck) y API (`api`):
+### Flujo Operativo con Docker Compose
 
 ```bash
-# 1. Iniciar solo la base de datos
+# 1. Iniciar servicio de base de datos
 docker compose up -d db
 
-# 2. Ejecutar precheck y migraciones canónicas de forma explícita
+# 2. Ejecutar precheck y migraciones canónicas
 docker compose run --rm api npm run db:precheck
 docker compose run --rm api npm run db:migrate
 
 # 3. Arrancar la API
 docker compose up -d api
 
-# 4. (Opcional, solo en laboratorio) Poblar datos de demostración
+# 4. (Opcional, solo laboratorio) Cargar datos de prueba
 docker compose run --rm api npm run db:seed
 ```
 
-**Conexiones internas vs host:**
-- Desde el host de desarrollo (tu máquina): la base está expuesta en `127.0.0.1:5434` (`DATABASE_URL`).
-- Desde contenedores dentro de Compose: se utiliza `DOCKER_DATABASE_URL` hacia el host interno `db:5432`. Si la contraseña contiene caracteres reservados (`@`, `#`, `/`, `%`), debe codificarse con percent-encoding (ej. `probe%40secret%23%2F`).
-- **Seguridad en Compose:** El servicio `api` no define fallbacks para `JWT_SECRET` ni `DOCKER_DATABASE_URL`; si faltan variables obligatorias, el proceso aborta de forma segura con código 1 antes de escuchar.
+### Comportamiento de Comillas en Variables de Entorno (E1)
 
-**Alcance de las sondas:** `/ready` verifica conectividad activa y existencia de las 4 tablas del modelo en Postgres con timeouts acotados en cliente y servidor (`<= 4s`, SLA `<= 5s`). No realiza verificación de drift completo ni checksums en cada petición (dicha verificación corresponde a `db:precheck`). Las sondas locales no certifican aptitud productiva ni pública.
+- **Docker Compose:** Interpreta el archivo `.env` y **elimina automáticamente las comillas** alrededor de los valores de las variables.
+- **Docker CLI (`docker run --env-file`):** **Conserva las comillas literales** como parte de la cadena del valor. Si se ejecuta un contenedor directamente con `--env-file`, los valores en el archivo deben escribirse sin comillas.
 
-## Estado de Publicación
+Para detalles exhaustivos sobre despliegue directo, procedimientos de rollback y límites técnicos, consultar la [Guía de Preparación de Despliegue](./docs/DEPLOYMENT.md).
 
-**No hay URL pública de demo verificada.** La publicación y comprobación con PostgreSQL/origen real del frontend se siguen en [#15](https://github.com/Talently-Lab/S2616-UrbanFix/issues/15). Se agregará la URL cuando exista y esté comprobada.
+---
 
-Todo push a GitHub necesita aprobación explícita del usuario para la rama y los commits presentados.
+## Estado de Publicación y Alcance del Ciclo
 
-## Detener y retomar
-
-- API local: `Ctrl+C` en su terminal.
-- Detener PostgreSQL Compose: `docker compose stop db` (o `docker stop urbanfix-postgres-local`).
-- Retomar PostgreSQL Compose: `docker compose start db` (o `docker start urbanfix-postgres-local`).
-- Detener y limpiar recursos de Compose: `docker compose down` (conserva el volumen `backend_db-data`; no usar `-v` si querés conservar datos).
+- **Issue #15 (BE-07, Publicación Pública) excluida:** Por instrucción explícita del usuario, la publicación en infraestructura pública queda excluida de este ciclo. No se han contratado proveedores ni provisionado bases productivas en la nube, y **no existe una URL pública de demostración configurada**.
+- **Push a repositorios:** Todo push requiere aprobación expresa del usuario para la rama y commits específicos.
+- **Dependencias externas:** La aprobación de diseño y conformidad visual por el equipo de Frontend y el consumo en producción desde la SPA continúan como dependencias externas al backend.
