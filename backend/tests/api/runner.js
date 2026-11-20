@@ -45,7 +45,7 @@ async function runTests(apiBaseUrl, healthUrl, testDbUrl, jwtSecret) {
   }
 
   const testArgs = process.argv.slice(2);
-  const targetFiles = testArgs.length > 0 ? testArgs : ['tests/api/api.test.js'];
+  const targetFiles = testArgs.length > 0 ? testArgs : ['tests/api/api.test.js', 'tests/api/concurrency.test.js'];
   console.log(`\n[Runner Tests] Iniciando ejecución de tests de integración (${targetFiles.join(', ')}) con node:test...\n`);
 
   return new Promise((resolve) => {

@@ -298,7 +298,19 @@ Ejemplo de error de transición:
 }
 ```
 
-## 9. Decisiones abiertas (a confirmar con el equipo)
+### 8.1 Reglas de concurrencia y serialización (BE-04)
+
+Todas las escrituras y transiciones de estado sobre una solicitud se ejecutan bajo transacciones atómicas con bloqueo de fila (`SELECT ... FOR UPDATE` en PostgreSQL). Las autorizaciones de rol/pertenencia y las precondiciones de estado se revalidan dentro del límite transaccional bajo el bloqueo, garantizando equivalencia con un orden serial estricto:
+
+1. **Aceptación simultánea (dos técnicos):** Exactamente uno gana (`200 OK`, asignación `tecnicoId`) y el perdedor recibe `409 CONFLICT` indicando que ya fue tomada.
+2. **Mismo técnico: aceptar vs rechazar:** Si rechaza primero, la solicitud permanece disponible en la bolsa y el intento de aceptar recibe `409 CONFLICT`. Si acepta primero, el intento de rechazar recibe `409 CONFLICT` y nunca se registra un evento de rechazo para el técnico asignado.
+3. **Rechazos duplicados por el mismo técnico:** Dos o más rechazos simultáneos resultan en exactamente un `200 OK` y el resto `409 CONFLICT`. Las colisiones de unicidad (`solicitudId, tecnicoId`) se capturan atómicamente y nunca devuelven error `500`.
+4. **Rechazo vs aceptación de técnicos distintos:** Si el rechazo ocurre mientras la solicitud está `PENDIENTE`, puede resolverse con `200` (quedando rechazada por ese técnico) y la posterior aceptación por otro técnico también recibe `200`. Si la aceptación se procesa primero, el intento de rechazo posterior recibe `409 CONFLICT`.
+5. **Edición (`PATCH /solicitudes/:id`) vs aceptación:** La edición está restringida exclusivamente al estado `PENDIENTE`. Si la aceptación se consolida primero, la edición recibe `409 CONFLICT` y los datos no son alterados fuera de `PENDIENTE`.
+6. **Cancelaciones concurrentes:** Múltiples cancelaciones concurrentes devuelven exactamente un `200 OK` y el resto `409 CONFLICT`, registrando una sola entrada de cancelación en el historial.
+7. **Cancelar vs Iniciar desde `ACEPTADA`:** Solo una transición es aceptada. La que gane el lock lleva la solicitud a `CANCELADA` o `EN_PROCESO`; la perdedora recibe `409 CONFLICT`. El historial no sufre ramificaciones inconsistentes.
+8. **Cancelar vs Aceptar desde `PENDIENTE`:** Si la cancelación gana, la solicitud queda `CANCELADA` y la aceptación es denegada con `409 CONFLICT` (prohibido resucitar solicitudes canceladas). Si la aceptación gana primero (`PENDIENTE` → `ACEPTADA`), la cancelación posterior es válida (`ACEPTADA` → `CANCELADA`).
+9. **Ejecución repetida (`iniciar`, `finalizar`):** Transiciones duplicadas devuelven exactamente un `200 OK` y el resto `409 CONFLICT`. Técnicos no asignados reciben `403 FORBIDDEN`. Los estados terminales (`FINALIZADA`, `CANCELADA`) rechazan cualquier transición posterior con `409 CONFLICT`.
 
 1. **Asignación:** se asumió un modelo de "bolsa" donde cualquier técnico ve las `PENDIENTE` y la primera en aceptar se la queda. Si el cliente elige al técnico, hay que agregar `tecnicoId` al crear y un `GET /tecnicos`.
 2. **Rechazo :** Con el modelo de bolsa, el rechazo de un técnico mantiene la solicitud en `PENDIENTE`, registrando el rechazo individual en `RechazoSolicitud` e `HistorialEstadoSolicitud`. El técnico que rechazó no vuelve a verla ni puede aceptarla, pero queda disponible para que otro técnico la tome.
