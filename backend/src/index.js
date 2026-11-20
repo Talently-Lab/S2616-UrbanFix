@@ -3,6 +3,7 @@ import express from 'express';
 import { loadConfig } from './config/env.js';
 import { createCorsMiddleware } from './middlewares/cors.middleware.js';
 import routes from './routes/index.js';
+import prisma from './config/prisma.js';
 
 // Validar configuración HTTP/auth/base de datos antes de escuchar
 let config;
@@ -19,9 +20,45 @@ const app = express();
 app.use(createCorsMiddleware(config.cors.allowedOrigins));
 app.use(express.json());
 
-// Health check
+// Health check (liveness del proceso)
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Readiness check (comprobación de conectividad y esquema preparado con PostgreSQL)
+const REQUIRED_TABLES = ['Usuario', 'SolicitudServicio', 'HistorialEstadoSolicitud', 'RechazoSolicitud'];
+
+app.get('/ready', async (req, res) => {
+  try {
+    const rows = await prisma.$queryRaw`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+        AND table_name IN ('Usuario', 'SolicitudServicio', 'HistorialEstadoSolicitud', 'RechazoSolicitud')
+    `;
+
+    const foundTables = new Set((rows || []).map((r) => r.table_name));
+    const isReady = REQUIRED_TABLES.every((t) => foundTables.has(t));
+
+    if (isReady) {
+      return res.status(200).json({
+        status: 'ready',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    return res.status(503).json({
+      status: 'unavailable',
+      message: 'Esquema de base de datos no preparado',
+      timestamp: new Date().toISOString()
+    });
+  } catch (_err) {
+    return res.status(503).json({
+      status: 'unavailable',
+      message: 'Base de datos no disponible',
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 app.use('/api', routes);

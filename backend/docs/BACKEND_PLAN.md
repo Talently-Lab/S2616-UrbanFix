@@ -15,7 +15,7 @@ Antigravity. QA independiente: Devin. Arquitectura y coordinación: Codex.
 | BE-03 | [#11 Entorno, JWT y CORS](https://github.com/Talently-Lab/S2616-UrbanFix/issues/11) | P1 | Coordinar tests con BE-02 | Integrada localmente; QA aprobado en 4b1cc2d, 59 tests; sin autorización de nuevo push |
 | BE-04 | [#12 Carreras y transiciones](https://github.com/Talently-Lab/S2616-UrbanFix/issues/12) | P1 | BE-01, BE-02 | Integrada localmente; QA aprobado en 4a1afab, 71 tests; sin aprobación de push |
 | BE-05 | [#13 Contrato y documentación](https://github.com/Talently-Lab/S2616-UrbanFix/issues/13) | P1 | BE-01, BE-02, BE-03, BE-04, BE-06 | README raíz/backend y .env.example completos; falta consolidar contrato y comportamiento final |
-| BE-06 | [#14 Docker y preparación de despliegue](https://github.com/Talently-Lab/S2616-UrbanFix/issues/14) | P1 | BE-01, BE-03 | Siguiente implementación: Docker y readiness, sin publicar |
+| BE-06 | [#14 Docker y preparación de despliegue](https://github.com/Talently-Lab/S2616-UrbanFix/issues/14) | P1 | BE-01, BE-03 | Implementada localmente; Dockerfile Node 24 slim no-root sin auto-migrate/seed, compose.yaml, GET /ready y timeouts <=5s, 78 tests; pendiente validación QA Devin |
 | BE-07 | [#15 Publicación y verificación pública](https://github.com/Talently-Lab/S2616-UrbanFix/issues/15) | P1 | BE-01 a BE-06, QA aprobado | Bloqueada hasta definir infraestructura y autorizar publicación concreta |
 
 ## Secuencia
@@ -101,3 +101,19 @@ falta de DATABASE_URL en la suite con centinelas en otro proceso (cero contactos
 ante variables ausentes/vacías). Se mantienen documentadas las limitaciones de
 las barreras temporizadas de tests y de sus contadores síncronos. La entrega
 está integrada localmente y requiere autorización de push.
+
+## Evidencia de BE-06
+
+Implementación de artefacto inmutable y preparación operativa (issue #14):
+- `Dockerfile` actualizado a `node:24-bookworm-slim`, usuario no-root (`node`), `npm ci` con lockfile, generación determinista de cliente Prisma sin secretos ni dependencias de red en build.
+- `CMD ["node", "src/index.js"]`: arranca exclusivamente el servidor HTTP. Se eliminó la ejecución automática de `prisma migrate deploy` y `prisma/seed.js` al iniciar.
+- Copia selectiva de utilidades de precheck (`tests/migrations/migration-precheck.js` y `tests/migrations/schemas/`) excluyendo suites de tests para mantener la imagen ligera.
+- `.dockerignore` exhaustivo excluyendo `.env`, `.env.*`, logs, git y suites de tests.
+- Endpoint público `GET /ready`: realiza consulta real a PostgreSQL (`prisma.$queryRaw`) comprobando presencia de las tablas de aplicación (`Usuario`, `SolicitudServicio`, `HistorialEstadoSolicitud`, `RechazoSolicitud`). Devuelve `200` si está preparada (la ausencia de filas de datos es válida) y `503` si la base no responde o faltan tablas.
+- Límites de timeout: `connectionTimeoutMillis: 5000` y `statement_timeout: 5000` en adaptador PrismaPg, acotando fallos de conexión a `<= 5s` sin consultas colgadas en segundo plano.
+- Sonda `GET /health` preservada como liveness del proceso (devuelve `200` incluso con PostgreSQL caído). Ambas sondas integradas bajo política CORS existente y con respuestas 503 estrictamente sanitizadas sin filtrar credenciales ni sentencias SQL.
+- Healthcheck de contenedor integrado usando `node:http` nativo (sin dependencias externas de `curl`).
+- Archivo `backend/compose.yaml` versionado con servicios `db` (Postgres 16 Alpine con healthcheck) y `api`, volumen persistente aislado por proyecto y puertos configurables para pruebas libres de colisiones.
+- Suite `npm test` ampliada de 71 a 78 tests passing (100% verde), cubriendo liveness, readiness en base migrada, readiness 503 ante falta de esquema, y timeout acotado <= 5s ante PostgreSQL inaccesible.
+- Smoke tests reales de imagen Docker y flujo completo de Compose ejecutados y aprobados con limpieza de recursos efímeros.
+- Documento [DEPLOYMENT.md](./DEPLOYMENT.md) y actualizaciones en `README.md`, `.env.example` y `API_CONTRACT.md`. La entrega está integrada localmente y requiere autorización de push.

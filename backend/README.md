@@ -21,7 +21,9 @@ En bases existentes, `20261011212651_add_last_login_to_usuario` sigue requiriend
 
 ## Instalación local
 
-Requisitos: Node.js 24 y npm; PostgreSQL accesible; Docker para usar la base del ejemplo. Puertos libres: `5434` para PostgreSQL y `3001` para API. No se necesita Docker Compose: no hay un archivo Compose versionado.
+Requisitos: Node.js 24 y npm; PostgreSQL 16 accesible (vía Docker, Docker Compose o instalación local). Puertos libres por defecto: `5434` para PostgreSQL y `3001` para API.
+
+Se dispone de configuración versionada en `backend/compose.yaml` para levantar PostgreSQL y la API de forma aislada, o se puede usar un contenedor Docker directo.
 
 ### 1. Instalar y configurar
 
@@ -34,7 +36,15 @@ cp .env.example .env
 
 Si ya está clonado, comenzar en `backend/` y ejecutar los últimos dos comandos.
 
-Crear una instancia PostgreSQL local propia con persistencia:
+#### Opción A: Levantar base de datos con Docker Compose (Recomendada)
+
+```bash
+docker compose up -d db
+```
+
+Inicia PostgreSQL 16 en segundo plano con comprobación de salud (`pg_isready`) y volumen persistente nombrado `backend_db-data`, exponiendo el puerto `127.0.0.1:5434`.
+
+#### Opción B: Crear instancia PostgreSQL directa con Docker
 
 ```bash
 docker run --detach --name urbanfix-postgres-local \
@@ -130,13 +140,16 @@ En otra terminal:
 
 ```bash
 curl --fail http://localhost:3001/health
+curl --fail http://localhost:3001/ready
 curl --fail http://localhost:3001/api/categorias
 curl --fail http://localhost:3001/api/auth/login \
   --header 'Content-Type: application/json' \
   --data '{"email":"juan@mail.com","password":"MinimoOchoCaracteres"}'
 ```
 
-El login del ejemplo necesita el seed. `/health` devuelve estado/timestamp del proceso, sin comprobar PostgreSQL. El login y las rutas autenticadas requieren una base preparada. La respuesta de login contiene `data.usuario` y `data.token`; enviar `Authorization: Bearer <token>` para rutas protegidas.
+- `/health`: Liveness probe del proceso Node.js (devuelve `status: ok` sin contactar la base).
+- `/ready`: Readiness probe operativo (devuelve `status: ready` y 200 solo si PostgreSQL responde y las tablas requeridas existen físicamente; si falta migración o la base está caída devuelve 503 con límite <=5s).
+El login del ejemplo necesita el seed. La respuesta de login contiene `data.usuario` y `data.token`; enviar `Authorization: Bearer <token>` para rutas protegidas.
 
 ## Comandos y pruebas
 
@@ -149,7 +162,7 @@ Ejecutar desde `backend/`:
 | `npm run db:migrate` | `prisma migrate deploy`; respetar los límites de #9. |
 | `npm run db:seed` / `npm run seed` | Seed explícito de demostración. |
 | `npm run db:studio` | Abre Prisma Studio con la base configurada. |
-| `npm test` | Suite de integración HTTP en `tests/api/runner.js`. Levanta PostgreSQL aislado (Docker efímero `postgres:16-alpine` o `TEST_DATABASE_URL`), aplica migraciones canónicas (`prisma migrate deploy`), seed de laboratorio, API en puerto libre y suite de 71 casos. Teardown automático. |
+| `npm test` | Suite de integración HTTP en `tests/api/runner.js`. Levanta PostgreSQL aislado (Docker efímero `postgres:16-alpine` o `TEST_DATABASE_URL`), aplica migraciones canónicas (`prisma migrate deploy`), seed de laboratorio, API en puerto libre y suite de 78 casos (incluye concurrencia, validación de startup, liveness y readiness). Teardown automático. |
 
 Están disponibles `db:precheck` y `test:migrations`; consultar la [guía de migraciones](./docs/MIGRATION_GUIDE.md) para ejecutarlos. `test:migrations` exige `TEST_DATABASE_URL` explícita hacia PostgreSQL exclusivo de laboratorio con privilegio `CREATEDB`. `npm test` utiliza Docker efímero automáticamente si está disponible, o `TEST_DATABASE_URL` si se especifica; si ninguno está disponible, falla con instrucciones legibles sin tocar `DATABASE_URL`. Para un script Node que no carga dotenv por sí mismo, usar `node --env-file=.env <ruta-del-script>` o exportar explícitamente las variables necesarias.
 
@@ -183,9 +196,46 @@ y la [validación QA](./docs/qa/be-04-review-4a1afab.md).
 
 Al consultar solicitudes, el cliente recibe estado y datos actuales del técnico. No hay SSE/WebSocket: el refresco automático de pantalla depende del frontend. Este ciclo no modifica `frontend/`, `data/` ni `qa/`.
 
-## Docker, demo y publicación
+## Docker y Preparación de Despliegue (BE-06)
 
-El `Dockerfile` existente ejecuta migraciones y seed automáticamente al arrancar, a diferencia de `npm start`. No usar ese arranque sobre una base productiva; la preparación sin seed automático se sigue en [#14](https://github.com/Talently-Lab/S2616-UrbanFix/issues/14).
+El artefacto Docker (`backend/Dockerfile`) está construido sobre `node:24-bookworm-slim`, se ejecuta bajo un usuario no-root (`node`), instala dependencias mediante lockfile (`npm ci`) y genera Prisma Client de forma determinista sin requerir conectividad de red a bases de datos ni secretos en build.
+
+A diferencia de versiones preliminares, el contenedor arranca **exclusivamente el servidor HTTP** (`node src/index.js`). **No aplica migraciones ni ejecuta seeds automáticamente al iniciar**.
+
+### Flujo Operativo de Release y Despliegue
+
+La preparación del entorno sigue una separación estricta entre el paso previo de preparación de esquema y la ejecución de la API:
+1. **Pre-check de estado:** `npm run db:precheck` (verifica estado `CLEAN_DATABASE` o `CANONICAL_FULLY_UPDATED`).
+2. **Aplicar migraciones:** `npm run db:migrate` (`prisma migrate deploy`).
+3. **Arranque de API:** `npm start` (o inicio del contenedor; supervisado vía `/health` y `/ready`).
+4. **Seed de demostración (exclusivo de laboratorio/demo):** `npm run db:seed`. Nunca debe ejecutarse en bases productivas.
+
+Para la guía detallada de operación, variables, reinicio, rollback y límites técnicos, consultar la [Guía de Despliegue y Operabilidad](./docs/DEPLOYMENT.md).
+
+### Docker Compose Local
+
+Se provee `backend/compose.yaml` con servicios aislados de base de datos (`db`, PostgreSQL 16 Alpine con healthcheck) y API (`api`):
+
+```bash
+# 1. Iniciar solo la base de datos
+docker compose up -d db
+
+# 2. Ejecutar precheck y migraciones canónicas de forma explícita
+docker compose run --rm api npm run db:precheck
+docker compose run --rm api npm run db:migrate
+
+# 3. Arrancar la API
+docker compose up -d api
+
+# 4. (Opcional, solo en laboratorio) Poblar datos de demostración
+docker compose run --rm api npm run db:seed
+```
+
+**Conexiones internas vs host:**
+- Desde el host de desarrollo (tu máquina): la base está expuesta en `127.0.0.1:5434`.
+- Desde contenedores dentro de Compose: el host es `db` y el puerto interno `5432` (`postgresql://urbanfix:urbanfix_pass@db:5432/urbanfix_db?schema=public`).
+
+## Estado de Publicación
 
 **No hay URL pública de demo verificada.** La publicación y comprobación con PostgreSQL/origen real del frontend se siguen en [#15](https://github.com/Talently-Lab/S2616-UrbanFix/issues/15). Se agregará la URL cuando exista y esté comprobada.
 
@@ -193,8 +243,7 @@ Todo push a GitHub necesita aprobación explícita del usuario para la rama y lo
 
 ## Detener y retomar
 
-- API: `Ctrl+C` en su terminal.
-- Detener PostgreSQL: `docker stop urbanfix-postgres-local`.
-- Retomar PostgreSQL: `docker start urbanfix-postgres-local`.
-
-Detener conserva el volumen; no borrarlo para resolver errores de migración. Consultar el [plan backend](./docs/BACKEND_PLAN.md) y el [baseline de QA](./docs/qa/baseline-and-acceptance.md).
+- API local: `Ctrl+C` en su terminal.
+- Detener PostgreSQL Compose: `docker compose stop db` (o `docker stop urbanfix-postgres-local`).
+- Retomar PostgreSQL Compose: `docker compose start db` (o `docker start urbanfix-postgres-local`).
+- Detener y limpiar recursos de Compose: `docker compose down` (conserva el volumen `backend_db-data`; no usar `-v` si querés conservar datos).

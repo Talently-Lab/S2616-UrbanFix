@@ -55,6 +55,7 @@ async function runTests(apiBaseUrl, healthUrl, testDbUrl, jwtSecret) {
         ...process.env,
         API_BASE_URL: apiBaseUrl,
         HEALTH_URL: healthUrl,
+        READY_URL: healthUrl.replace(/\/health$/, '/ready'),
         DATABASE_URL: testDbUrl,
         JWT_SECRET: jwtSecret,
         NODE_ENV: 'test',

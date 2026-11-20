@@ -51,7 +51,7 @@ export function getAvailablePort() {
 
 export function isDockerAvailable() {
   try {
-    execSync('docker info', { stdio: 'ignore', timeout: 3000 });
+    execSync('docker info', { stdio: 'ignore', timeout: 10000 });
     return true;
   } catch (_) {
     return false;

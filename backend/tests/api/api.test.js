@@ -1,10 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import os from 'node:os';
+import net from 'node:net';
+import pg from 'pg';
 import jwt from 'jsonwebtoken';
 import {
   loadConfig,
@@ -23,8 +25,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const backendRoot = path.resolve(__dirname, '../..');
 
+const { Client } = pg;
+
 const API_BASE_URL = process.env.API_BASE_URL;
 const HEALTH_URL = process.env.HEALTH_URL;
+const READY_URL = process.env.READY_URL || (HEALTH_URL ? HEALTH_URL.replace(/\/health$/, '/ready') : null);
 const JWT_SECRET = process.env.JWT_SECRET;
 
 // B5: Exigir entorno explícito provisto por el arnés; abortar antes de cualquier HTTP si falta
@@ -86,6 +91,56 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
       assert.equal(res.status, 200);
       const data = await res.json();
       assert.equal(data.status, 'ok');
+      assert.equal(res.headers.get('access-control-allow-origin'), 'http://localhost:5173');
+      const vary = res.headers.get('vary') || '';
+      assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin');
+    });
+
+    it('GET /ready sin Origin retorna 200 con status ready, timestamp ISO, sin allow-origin y con Vary: Origin cuando la DB está migrada', async () => {
+      const res = await api(READY_URL);
+      assert.equal(res.status, 200);
+      assert.equal(res.data.status, 'ready');
+      assert.ok(res.data.timestamp);
+      assert.ok(!isNaN(Date.parse(res.data.timestamp)));
+      assert.equal(res.headers.get('access-control-allow-origin'), null);
+      const vary = res.headers.get('vary') || '';
+      assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin incluso sin Origin');
+    });
+
+    it('GET /ready con Origin permitido (http://localhost:5173) retorna 200, status ready, su origen y Vary: Origin', async () => {
+      const res = await fetch(READY_URL, {
+        headers: { 'Origin': 'http://localhost:5173' }
+      });
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.status, 'ready');
+      assert.equal(res.headers.get('access-control-allow-origin'), 'http://localhost:5173');
+      const vary = res.headers.get('vary') || '';
+      assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin');
+    });
+
+    it('GET /ready con Origin no permitido retorna 403 con CORS_ORIGIN_DENIED, Vary: Origin y sin allow-origin', async () => {
+      const res = await fetch(READY_URL, {
+        headers: { 'Origin': 'http://malicious-site.com' }
+      });
+      assert.equal(res.status, 403);
+      const data = await res.json();
+      assert.equal(data.error.code, 'CORS_ORIGIN_DENIED');
+      assert.equal(res.headers.get('access-control-allow-origin'), null);
+      const vary = res.headers.get('vary') || '';
+      assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin');
+    });
+
+    it('OPTIONS /ready (CORS Preflight) con Origin permitido responde 204 con métodos, headers y Vary: Origin', async () => {
+      const res = await fetch(READY_URL, {
+        method: 'OPTIONS',
+        headers: {
+          'Origin': 'http://localhost:5173',
+          'Access-Control-Request-Method': 'GET',
+          'Access-Control-Request-Headers': 'Content-Type, Authorization'
+        }
+      });
+      assert.equal(res.status, 204);
       assert.equal(res.headers.get('access-control-allow-origin'), 'http://localhost:5173');
       const vary = res.headers.get('vary') || '';
       assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin');
@@ -1391,6 +1446,180 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
         await new Promise((resolve) => tcpServer.close(resolve));
         await new Promise((resolve) => httpServer.close(resolve));
       }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 9. Liveness y Readiness Probes (BE-06)
+  // -------------------------------------------------------------------------
+  describe('9. Liveness y Readiness Probes (BE-06)', () => {
+    function getFreePort() {
+      return new Promise((resolve, reject) => {
+        const s = net.createServer();
+        s.unref();
+        s.on('error', reject);
+        s.listen(0, '127.0.0.1', () => {
+          const port = s.address().port;
+          s.close(() => resolve(port));
+        });
+      });
+    }
+
+    async function waitForHttp(url, maxWaitMs = 6000) {
+      const start = Date.now();
+      while (Date.now() - start < maxWaitMs) {
+        try {
+          const res = await fetch(url, { signal: AbortSignal.timeout(500) });
+          return res;
+        } catch (_) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
+      throw new Error(`Timeout esperando servidor en ${url}`);
+    }
+
+    function spawnTestApi(envOverrides = {}) {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'uf-probe-srv-'));
+      const entrypoint = path.join(backendRoot, 'src/index.js');
+      const baseEnv = {
+        PATH: process.env.PATH,
+        NODE_ENV: 'test',
+        JWT_SECRET: 'secreto_valido_de_prueba_de_mas_de_32_caracteres_longitud',
+        JWT_EXPIRES_IN: '7d',
+        CORS_ORIGINS: 'http://localhost:5173,http://127.0.0.1:5173',
+        ...envOverrides
+      };
+
+      const child = spawn('node', [entrypoint], {
+        cwd: tempDir,
+        env: baseEnv,
+        detached: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+
+      return { child, tempDir };
+    }
+
+    async function killTestApi({ child, tempDir }) {
+      if (child && child.pid) {
+        try {
+          process.kill(-child.pid, 'SIGKILL');
+        } catch (_) {
+          try { child.kill('SIGKILL'); } catch (_) {}
+        }
+      }
+      try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_) {}
+    }
+
+    it('GET /ready ante base de datos sin esquema preparado responde 503 sin filtrar datos sensibles ni credenciales', async () => {
+      if (!process.env.DATABASE_URL) return;
+
+      const adminUrl = new URL(process.env.DATABASE_URL);
+      adminUrl.pathname = '/postgres';
+      const emptyDbName = `uf_empty_ready_test_${Date.now()}`;
+
+      const client = new Client({ connectionString: adminUrl.toString(), connectionTimeoutMillis: 3000 });
+      let dbCreated = false;
+
+      try {
+        await client.connect();
+        await client.query(`CREATE DATABASE ${emptyDbName};`);
+        dbCreated = true;
+      } catch (err) {
+        // Si no tiene privilegios de creación de base, omitir gracefully
+        return;
+      } finally {
+        try { await client.end(); } catch (_) {}
+      }
+
+      const emptyDbUrl = new URL(process.env.DATABASE_URL);
+      emptyDbUrl.pathname = `/${emptyDbName}`;
+
+      const freePort = await getFreePort();
+      const srv = spawnTestApi({
+        PORT: String(freePort),
+        DATABASE_URL: emptyDbUrl.toString()
+      });
+
+      try {
+        const healthUrl = `http://127.0.0.1:${freePort}/health`;
+        const readyUrl = `http://127.0.0.1:${freePort}/ready`;
+
+        // 1. Proceso arranca y /health responde 200 (liveness)
+        const healthRes = await waitForHttp(healthUrl, 6000);
+        assert.equal(healthRes.status, 200);
+
+        // 2. /ready responde 503 porque faltan las tablas requeridas
+        const readyRes = await fetch(readyUrl);
+        assert.equal(readyRes.status, 503);
+        const data = await readyRes.json();
+        assert.equal(data.status, 'unavailable');
+        assert.ok(data.message.includes('no preparado'));
+
+        // 3. No expone credenciales ni fragmentos SQL en respuesta
+        const text = JSON.stringify(data);
+        assert.equal(text.includes(emptyDbName), false, 'No debe filtrar nombre de base');
+        assert.equal(text.includes('password'), false, 'No debe filtrar password');
+        assert.equal(text.includes('SELECT'), false, 'No debe filtrar sentencias SQL');
+      } finally {
+        await killTestApi(srv);
+        if (dbCreated) {
+          const cleanupClient = new Client({ connectionString: adminUrl.toString(), connectionTimeoutMillis: 3000 });
+          try {
+            await cleanupClient.connect();
+            await cleanupClient.query(`DROP DATABASE IF EXISTS ${emptyDbName} WITH (FORCE);`);
+          } finally {
+            try { await cleanupClient.end(); } catch (_) {}
+          }
+        }
+      }
+    });
+
+    it('GET /ready ante PostgreSQL inaccesible responde 503 en <= 5s y /health se mantiene 200', async () => {
+      const closedPort = await getFreePort();
+      const freePort = await getFreePort();
+      const unreachableDbUrl = `postgresql://fake_user:fake_password_12345@127.0.0.1:${closedPort}/fake_db?schema=public`;
+
+      const srv = spawnTestApi({
+        PORT: String(freePort),
+        DATABASE_URL: unreachableDbUrl
+      });
+
+      try {
+        const healthUrl = `http://127.0.0.1:${freePort}/health`;
+        const readyUrl = `http://127.0.0.1:${freePort}/ready`;
+
+        // Liveness del proceso responde 200 aunque la DB esté caída
+        const healthRes = await waitForHttp(healthUrl, 6000);
+        assert.equal(healthRes.status, 200);
+
+        // Readiness falla en <= 5000ms
+        const t0 = Date.now();
+        const readyRes = await fetch(readyUrl);
+        const elapsed = Date.now() - t0;
+
+        assert.equal(readyRes.status, 503);
+        assert.ok(elapsed <= 5500, `El timeout debe ser acotado (<=5s), tomó ${elapsed}ms`);
+        const data = await readyRes.json();
+        assert.equal(data.status, 'unavailable');
+        assert.ok(data.message.includes('no disponible'));
+
+        // No filtra credenciales
+        const text = JSON.stringify(data);
+        assert.equal(text.includes('fake_password_12345'), false, 'No debe filtrar contraseñas');
+        assert.equal(text.includes('fake_user'), false, 'No debe filtrar usuarios');
+      } finally {
+        await killTestApi(srv);
+      }
+    });
+
+    it('Readiness probe no falla si la base migrada no contiene filas de usuarios o solicitudes', async () => {
+      // Sobre la API ya corriendo contra la base migrada
+      const res = await fetch(READY_URL);
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.status, 'ready');
+      assert.ok(data.timestamp);
     });
   });
 });

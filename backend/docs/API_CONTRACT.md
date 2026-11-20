@@ -56,9 +56,42 @@ Listados paginados:
 - **Comportamiento por origen:**
   - **Origen permitido:** Devuelve `Access-Control-Allow-Origin: <origin>` reflejando el origen exacto y la cabecera `Vary: Origin`. Las peticiones preflight (`OPTIONS`) responden HTTP 204 No Content indicando métodos admitidos y cabeceras `Content-Type, Authorization`.
   - **Origen denegado:** Devuelve HTTP 403 con código `CORS_ORIGIN_DENIED` en JSON y **sin** cabecera `Access-Control-Allow-Origin`.
-  - **Peticiones sin cabecera `Origin`:** (ej. curl, herramientas CLI, verificaciones `/health`, comunicación servidor a servidor) se procesan normalmente sin restricciones CORS, sujetas a la autenticación estándar.
+  - **Peticiones sin cabecera `Origin`:** (ej. curl, herramientas CLI, verificaciones `/health` y `/ready`, comunicación servidor a servidor) se procesan normalmente sin restricciones CORS, sujetas a la autenticación estándar.
 - **Sin credenciales de cookie:** La API no emite ni requiere cookies (`credentials`); el token viaja como Bearer en `Authorization`.
 - **Límite de seguridad:** La política CORS protege a los navegadores de peticiones cruzadas no deseadas; **CORS no sustituye la autenticación ni los permisos de roles**.
+
+### Sondas Operativas (Liveness y Readiness — BE-06)
+
+Rutas públicas a nivel de raíz del servidor HTTP (fuera del prefijo `/api`):
+
+#### GET `/health` (Liveness probe)
+- **Propósito:** Comprueba que el proceso de Node.js / Express está vivo y aceptando peticiones HTTP. No contacta a PostgreSQL ni depende del estado del esquema.
+- **Acceso:** Público. Sujeto a allowlist de CORS.
+- **Respuesta 200 OK:**
+  ```json
+  { "status": "ok", "timestamp": "2026-11-20T19:30:00.000Z" }
+  ```
+
+#### GET `/ready` (Readiness probe)
+- **Propósito:** Comprueba que el proceso puede atender tráfico productivo verificando conectividad real con PostgreSQL y la presencia física del esquema de tablas de la aplicación (`Usuario`, `SolicitudServicio`, `HistorialEstadoSolicitud`, `RechazoSolicitud`) mediante el singleton del cliente Prisma configurado.
+- **Límite de tiempo:** Acotado mediante timeout de driver y consulta (`<= 5s`). Ante caídas de red o servidor inaccesible, el fallo se reporta de forma determinista sin colgar conexiones en segundo plano.
+- **Acceso:** Público. Sujeto a allowlist de CORS.
+- **Respuesta 200 OK (Listo para recibir tráfico):**
+  PostgreSQL responde y todas las tablas requeridas existen físicamente en el esquema `public`. La ausencia de filas de datos en una base migrada vacía no es un error.
+  ```json
+  { "status": "ready", "timestamp": "2026-11-20T19:30:00.000Z" }
+  ```
+- **Respuesta 503 Service Unavailable (No listo):**
+  Emitido si PostgreSQL no responde, si la conexión excede el timeout de 5 segundos, o si faltan tablas requeridas en el esquema de la base de datos (por ejemplo, base de datos recién creada sin migraciones aplicadas).
+  - Si falta el esquema requerido:
+    ```json
+    { "status": "unavailable", "message": "Esquema de base de datos no preparado", "timestamp": "2026-11-20T19:30:00.000Z" }
+    ```
+  - Si la base de datos no responde o falla la conexión:
+    ```json
+    { "status": "unavailable", "message": "Base de datos no disponible", "timestamp": "2026-11-20T19:30:00.000Z" }
+    ```
+- **Garantía de confidencialidad:** Las respuestas 503 son estrictamente mínimas y **nunca** exponen nombres de base de datos, hosts, usuarios, contraseñas, fragmentos de consultas SQL ni volcados de error interno del motor relacional.
 
 ## 2. Enums
 

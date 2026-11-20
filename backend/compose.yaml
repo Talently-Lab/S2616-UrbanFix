@@ -1,0 +1,53 @@
+# ==============================================================================
+# UrbanFix - Configuración Docker Compose Local (backend/compose.yaml)
+# ==============================================================================
+# Uso local y de pruebas de integración aisladas.
+# Valores predeterminados exclusivamente para laboratorio/demostración local.
+# No utilizar credenciales de ejemplo en entornos productivos.
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-urbanfix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-urbanfix_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-urbanfix_db}
+    ports:
+      # Expone PostgreSQL a localhost para herramientas de host (Prisma CLI local, Studio)
+      - "127.0.0.1:${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      # Volumen nombrado aislado por proyecto para persistencia local de desarrollo
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-urbanfix} -d ${POSTGRES_DB:-urbanfix_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 3s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      # Puerto HTTP en localhost (predeterminado: 3001)
+      - "127.0.0.1:${PORT:-3001}:${PORT:-3001}"
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      # Conexión interna dentro de la red Compose (host 'db' y puerto 5432)
+      DATABASE_URL: postgresql://${POSTGRES_USER:-urbanfix}:${POSTGRES_PASSWORD:-urbanfix_pass}@db:5432/${POSTGRES_DB:-urbanfix_db}?schema=public
+      PORT: ${PORT:-3001}
+      JWT_SECRET: ${JWT_SECRET:-reemplazar-por-un-secreto-propio-aleatorio-32-chars-min}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+    # La API arranca sin aplicar migraciones ni sembrar datos automáticamente.
+    # Preparación previa: docker compose run --rm api npm run db:migrate
+    # Seed opcional:      docker compose run --rm api npm run db:seed
+
+volumes:
+  db-data:
