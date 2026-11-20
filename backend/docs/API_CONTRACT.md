@@ -13,7 +13,7 @@ Este documento especifica el contrato HTTP, rutas, estructuras de datos (DTOs), 
 - **Formato de intercambio:** JSON (`Content-Type: application/json; charset=utf-8`).
 - **Codificación de caracteres:** UTF-8.
 - **Fechas y marcas de tiempo:** Cadenas en formato ISO 8601 en UTC (ej: `"2026-10-05T14:30:00.000Z"`).
-- **Identificadores:** UUID v4 en formato string.
+- **Identificadores:** Cadenas de texto (string). En la base de datos se generan por defecto como UUID v4 (`@default(uuid())`). No se impone una validación estricta de versión v4 sobre parámetros de entrada y ciertos identificadores fijos (como los provistos en el seed de laboratorio) utilizan versiones específicas.
 - **Autenticación:** Cabecera HTTP `Authorization: Bearer <token>` con token JWT firmado. Las rutas marcadas con 🔒 requieren autenticación obligatoria.
 - **Seguridad de contraseñas:** La propiedad `passwordHash` se almacena exclusivamente con hash bcrypt (salt rounds 10) y **nunca** se devuelve ni se expone en ninguna respuesta HTTP de la API.
 
@@ -23,7 +23,7 @@ Respuesta de entidad única:
 ```json
 {
   "data": {
-    "id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+    "id": "a1b2c3d4-e5f6-4a8b-9c0d-1e2f3a4b5c6d"
   }
 }
 ```
@@ -42,7 +42,7 @@ Respuesta de listados paginados:
 
 ### 1.2 Formato de Error
 
-Todas las respuestas de error utilizan un envoltorio estándar con un objeto `error`:
+Todas las respuestas de error de la API REST bajo `/api` y las emitidas por el manejador global de excepciones utilizan un envoltorio estándar con un objeto `error` (a excepción de las sondas operativas de infraestructura fuera de `/api`, tales como `/ready` 503, que retornan su propio DTO plano de estado de servicio; ver §1.4):
 
 ```json
 {
@@ -61,13 +61,18 @@ Todas las respuestas de error utilizan un envoltorio estándar con un objeto `er
 
 | Código HTTP | `error.code` | Descripción / Cuándo ocurre |
 |---|---|---|
-| `400` | `VALIDATION_ERROR` | Cuerpos JSON o parámetros de consulta (`query`/`params`) sintácticamente inválidos o que no superan las restricciones del esquema Zod. |
+| `400` | `VALIDATION_ERROR` | Fallos de validación de esquema Zod sobre el cuerpo (`body`) o parámetros de consulta (`query`). |
 | `401` | `UNAUTHORIZED` | Token ausente, token con formato no válido, firma incorrecta, token expirado o credenciales de login inválidas. |
 | `403` | `FORBIDDEN` | Usuario autenticado cuyo rol o pertenencia no tiene permiso para la acción (ej. cliente intentando tomar solicitudes, o técnico accediendo a solicitudes que rechazó). |
 | `403` | `CORS_ORIGIN_DENIED` | Origen del navegador no autorizado por la allowlist de `CORS_ORIGINS`. Devuelto sin cabecera `Access-Control-Allow-Origin`. |
 | `404` | `NOT_FOUND` | Ruta no registrada o recurso solicitado inexistente en la base de datos. |
 | `409` | `CONFLICT` | Conflicto de estado o unicidad: email ya registrado, rechazo repetido, solicitud ya tomada por otro técnico o transición de estado no válida. |
-| `500` | `INTERNAL_ERROR` | Error imprevisto en el servidor. En producción no expone trazas ni detalles internos. |
+| `500` | `INTERNAL_ERROR` (o código de error del motor) | Error imprevisto en el servidor. El manejador devuelve `error.code` (predeterminado `INTERNAL_ERROR`) y `error.message` del error capturado, que pueden incluir detalles internos del driver o de Prisma. |
+
+> [!NOTE] Precisiones sobre Errores 400 y 500 en el Backend Actual
+> - **Cuerpos JSON malformados:** Si un cliente envía un cuerpo con sintaxis JSON inválida que no puede ser parseado por `express.json()`, el middleware emite un error con status 400 sin código predefinido; el manejador global lo captura y responde HTTP 400 con `error.code: "INTERNAL_ERROR"` y el mensaje del parser de Express (`Unexpected token...`), en lugar de `VALIDATION_ERROR`.
+> - **Parámetros de ruta (`:id`):** Los parámetros de ruta (`req.params.id`) no son validados con Zod en los routers; si se envía un identificador con formato arbitrario o inexistente, la petición prosigue al servicio y responde `404 NOT_FOUND` (o `403 FORBIDDEN` si el control de acceso del usuario evalúa pertenencia antes de consultar la existencia), no `400`.
+> - **Manejo de 500 y ausencia de saneamiento por entorno:** El manejador global de errores actual reenvía `err.code` y `err.message` de forma directa sin filtrar mensajes internos de PostgreSQL o Prisma según `NODE_ENV`. Este comportamiento representa un límite conocido del backend actual y un área identificada para futuro hardening.
 
 ### 1.3 Política CORS y Seguridad de Transporte
 
@@ -76,9 +81,9 @@ Todas las respuestas de error utilizan un envoltorio estándar con un objeto `er
   - En `production`: **exige** una lista explícita y no vacía de orígenes HTTP(S) autorizados, separados por coma. Se rechazan terminantemente el comodín `*` y el origen `null`.
 - **Comportamiento por origen:**
   - **Origen permitido:** Devuelve la cabecera `Access-Control-Allow-Origin: <origin>` reflejando el origen exacto y la cabecera `Vary: Origin`. Las peticiones preflight (`OPTIONS`) responden HTTP `204 No Content` con métodos y cabeceras autorizados (`Content-Type, Authorization`).
-  - **Origen no permitido:** Devuelve HTTP `403` con `{ "error": { "code": "CORS_ORIGIN_DENIED", "message": "Origen no permitido por CORS" } }`, sin cabeceras `Access-Control-Allow-Origin`.
+  - **Origen no permitido:** Devuelve HTTP `403` con `{ "error": { "code": "CORS_ORIGIN_DENIED", "message": "Origen no permitido por la política CORS" } }`, sin cabeceras `Access-Control-Allow-Origin`.
   - **Peticiones sin cabecera `Origin`:** Herramientas CLI (curl, postman, scripts), tareas servidor a servidor y sondas de salud (`/health`, `/ready`) no incluyen cabecera `Origin` y son procesadas normalmente, sujetas únicamente a la autenticación estándar.
-- **Sin cookies ni credenciales de sesión:** La API no emite ni lee cookies de sesión (`Access-Control-Allow-Credentials: false`); la sesión viaja exclusivamente en la cabecera `Authorization`.
+- **Sin cookies ni credenciales de sesión:** La API no emite ni lee cookies de sesión; la autenticación viaja exclusivamente como Bearer token en la cabecera `Authorization`. En concordancia, la API **omite por completo** la cabecera `Access-Control-Allow-Credentials` (lo que a nivel de navegador equivale a no autorizar credenciales).
 - **Límite de seguridad:** CORS restringe únicamente a navegadores web; no sustituye la autenticación ni el control de acceso por roles (RBAC).
 
 ### 1.4 Sondas Operativas del Servidor (Liveness y Readiness)
@@ -221,13 +226,13 @@ El modelo relaciona `SolicitudServicio` con categoría; no existe una tabla `Ser
 
 ```json
 {
-  "id": "f1e2d3c4-b5a6-7890-1234-56789abcdef0",
+  "id": "f1e2d3c4-b5a6-4890-8234-56789abcdef0",
   "solicitudId": "c7a8b9d0-1e2f-4a3b-8c5d-6e7f8a9b0c1d",
   "estadoAnterior": "PENDIENTE",
   "estadoNuevo": "ACEPTADA",
   "accion": null,
   "cambiadoPor": {
-    "id": "9a8b7c6d-5e4f-3a2b-1c0d-e4f3a2b1c0d9",
+    "id": "9a8b7c6d-5e4f-4a2b-8c0d-e4f3a2b1c0d9",
     "nombre": "Carlos Gómez",
     "rol": "TECNICO"
   },
@@ -415,7 +420,7 @@ Todas las rutas bajo `/api/admin` están protegidas por el middleware `authorize
         "fechaCreacion": "2026-10-05T14:30:00.000Z"
       },
       {
-        "id": "9a8b7c6d-5e4f-3a2b-1c0d-e4f3a2b1c0d9",
+        "id": "9a8b7c6d-5e4f-4a2b-8c0d-e4f3a2b1c0d9",
         "email": "carlos@mail.com",
         "nombre": "Carlos Gómez",
         "celular": "3884654321",
@@ -569,7 +574,7 @@ Todas las rutas bajo `/api/solicitudes` requieren autenticación obligatoria (�
     - Si no especifica `estado`: ve las solicitudes en `PENDIENTE` disponibles (no rechazadas por él) más todas sus solicitudes asignadas (`tecnicoId == user.id`).
   - **`ADMIN`:** Visualiza todas las solicitudes del sistema.
 - **Parámetros de consulta (Query params, todos opcionales):**
-  - `estado`: filtro por estado (`PENDIENTE`, `ACEPTADA`, `EN_PROCESO`, `FINALIZADA`, `CANCELADA`).
+  - `estado`: filtro por estado. El esquema Zod acepta los 6 estados del enum: `PENDIENTE`, `ACEPTADA`, `EN_PROCESO`, `FINALIZADA`, `CANCELADA`, y también `RECHAZADA` (este último deprecado en el modelo de bolsa; pasa la validación y filtra la consulta, aunque en el flujo actual no existan filas asignadas con este estado).
     > [!IMPORTANT] Filtro de Estado para Administradores
     > Los administradores filtran solicitudes por estado invocando `GET /api/solicitudes?estado=...`. **No existe una ruta `/api/admin/solicitudes` separada ni un filtro por rol de usuario**.
   - `categoria`: filtro por categoría de servicio (`PLOMERIA`, etc.).
@@ -656,7 +661,7 @@ Todas las rutas bajo `/api/solicitudes` requieren autenticación obligatoria (�
   {
     "data": [
       {
-        "id": "f1e2d3c4-b5a6-7890-1234-56789abcdef0",
+        "id": "f1e2d3c4-b5a6-4890-8234-56789abcdef0",
         "solicitudId": "c7a8b9d0-1e2f-4a3b-8c5d-6e7f8a9b0c1d",
         "estadoAnterior": null,
         "estadoNuevo": "PENDIENTE",
@@ -670,13 +675,13 @@ Todas las rutas bajo `/api/solicitudes` requieren autenticación obligatoria (�
         "fechaCambio": "2026-11-20T20:30:00.000Z"
       },
       {
-        "id": "a2b3c4d5-e6f7-8901-2345-6789abcdef01",
+        "id": "a2b3c4d5-e6f7-4901-8345-6789abcdef01",
         "solicitudId": "c7a8b9d0-1e2f-4a3b-8c5d-6e7f8a9b0c1d",
         "estadoAnterior": "PENDIENTE",
         "estadoNuevo": "ACEPTADA",
         "accion": null,
         "cambiadoPor": {
-          "id": "9a8b7c6d-5e4f-3a2b-1c0d-e4f3a2b1c0d9",
+          "id": "9a8b7c6d-5e4f-4a2b-8c0d-e4f3a2b1c0d9",
           "nombre": "Carlos Gómez",
           "rol": "TECNICO"
         },

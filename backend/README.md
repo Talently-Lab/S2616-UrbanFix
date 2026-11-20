@@ -39,9 +39,21 @@ Requisitos:
 - PostgreSQL 16 accesible (vía Docker, Docker Compose o instalación local).
 - Puertos libres predeterminados: `5434` para PostgreSQL y `3001` para la API HTTP.
 
-### 1. Clonar o Ubicar el Repositorio
+### 1. Obtener o Ubicar el Repositorio
 
-Si comienzas desde un checkout existente:
+#### Opción 1: Nuevo clon desde repositorio remoto (limitado a entregas publicadas)
+```bash
+git clone https://github.com/Talently-Lab/S2616-UrbanFix.git
+cd S2616-UrbanFix/backend
+# La rama publicada con entregas aprobadas hasta hoy (#9/#10) es chore/backend-orchestration (commit e40b9ba):
+git checkout chore/backend-orchestration
+npm ci
+cp -n .env.example .env
+```
+*(Nota sobre ramas remotas: tal como se detalla en "Estado de Git", el repositorio remoto contiene únicamente las entregas publicadas hasta `e40b9ba`. Los avances posteriores de BE-03, BE-04, BE-06 y BE-05 residen actualmente en las ramas de trabajo locales y se publicarán cuando el usuario lo autorice).*
+
+#### Opción 2: Espacio de trabajo o checkout local existente
+Si ya estás trabajando sobre una copia local de la rama de trabajo:
 ```bash
 cd backend
 npm ci
@@ -55,7 +67,7 @@ cp -n .env.example .env
 ```bash
 docker compose up -d db
 ```
-Inicia PostgreSQL 16 Alpine con comprobación de salud (`pg_isready`) y volumen persistente nombrado `backend_db-data`, exponiendo el puerto `127.0.0.1:5434`.
+Inicia PostgreSQL 16 Alpine con comprobación de salud (`pg_isready`) y volumen persistente nombrado `db-data` (nombrado por Docker Compose como `<proyecto>_db-data`, por ejemplo `backend_db-data` en una estructura estándar de directorios), exponiendo el puerto `127.0.0.1:5434`.
 
 #### Opción B: Contenedor PostgreSQL directo con Docker
 ```bash
@@ -168,7 +180,7 @@ Todos los comandos se ejecutan desde el directorio `backend/`:
 | `npm run db:seed` | Puebla cuentas y registros de demostración en base local de laboratorio. |
 | `npm run db:studio` | Abre interfaz gráfica Prisma Studio contra la base configurada en `DATABASE_URL`. |
 | `npm test` | Suite de 78 pruebas de integración HTTP (`tests/api/runner.js`). Levanta un contenedor efímero PostgreSQL 16 aislado (o utiliza `TEST_DATABASE_URL`), aplica migraciones canónicas, ejecuta suite completa (auth, RBAC, concurrencia, sondas `/health` y `/ready`) y realiza teardown automático. |
-| `npm run test:migrations` | Suite de 11 escenarios de migración (F0 a F10 en `verify-migrations.js`). Requiere `TEST_DATABASE_URL` con privilegios `CREATEDB`. |
+| `npm run test:migrations` | Suite de verificación de ciclo de vida de migraciones (escenarios F0 a F11, más el fixture F2-Mislabeled y la comprobación de supervivencia del sentinel en `verify-migrations.js`). Requiere `TEST_DATABASE_URL` con privilegios `CREATEDB`. |
 
 ---
 

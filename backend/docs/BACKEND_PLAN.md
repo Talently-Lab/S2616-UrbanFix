@@ -20,7 +20,7 @@ Antigravity. QA independiente: Devin. Arquitectura y coordinación: Codex.
 
 ## Secuencia Ejecutada y Estado
 
-1. **BE-01:** Antigravity implementó la secuencia canónica limpia (eliminando duplicados obsoletos de semanas previas) y la herramienta `db:precheck`. Devin validó los 11 escenarios F0 a F10 en [be-01-review-e826df7.md](./qa/be-01-review-e826df7.md).
+1. **BE-01:** Antigravity implementó la secuencia canónica limpia (eliminando duplicados obsoletos de semanas previas) y la herramienta `db:precheck`. Devin validó la matriz de migraciones F0 a F11 (incluyendo F2-Mislabeled y supervivencia del centinela) en [be-01-review-e826df7.md](./qa/be-01-review-e826df7.md).
 2. **BE-02:** Antigravity restauró el harness de pruebas automatizadas con Docker efímero y teardown reactivo de señales (`SIGINT`/`SIGTERM`, resolución de M1). Devin aprobó 31 casos en [be-02-review-0829fc0.md](./qa/be-02-review-0829fc0.md).
 3. **Pushes autorizados a la fecha:** El usuario autorizó formalmente el push de las entregas de BE-01 y BE-02 hasta el commit `e40b9ba` en la rama `chore/backend-orchestration`. Todo el trabajo posterior reside exclusivamente en la rama de trabajo local.
 4. **BE-03:** Validación sincrónica de entorno en memoria (`src/config/env.js`), obligatoriedad de `JWT_SECRET` (mínimo 32 caracteres, sin fallbacks débiles y rechazando placeholder) y middleware de CORS configurable con allowlist estricta en producción. Devin aprobó 59 casos en [be-03-review-4b1cc2d.md](./qa/be-03-review-4b1cc2d.md).
@@ -32,7 +32,7 @@ Antigravity. QA independiente: Devin. Arquitectura y coordinación: Codex.
 ## Evidencia y Métricas de QA Integradas
 
 - **Suite de Pruebas HTTP (`npm test`):** 78 casos pasando (100% verde), cubriendo registro, login, usuarios, alias, administración, categorías, solicitudes, bolsa de trabajo, rechazos, concurrencia de transiciones, validación de startup, liveness `/health` y readiness `/ready`.
-- **Suite de Migraciones (`npm run test:migrations`):** 11 fixtures (F0 a F10) con base PostgreSQL limpia, baselining con datos preexistentes de semana 3 mediante procedimiento conservador, diffs de snapshots DDL y mitigación de procesos huérfanos.
+- **Suite de Migraciones (`npm run test:migrations`):** Matriz completa F0 a F11 más el fixture F2-Mislabeled y la comprobación de supervivencia del sentinel, con base PostgreSQL limpia, baselining con datos preexistentes de semana 3 mediante procedimiento conservador, diffs de snapshots DDL y mitigación de procesos huérfanos.
 - **Auditoría de Secretos y Confidencialidad:** Las respuestas 503 y los registros de error de configuración nunca exponen contraseñas, URLs de conexión ni consultas SQL internas.
 
 ## Decisiones de Alcance y Límites Técnicos

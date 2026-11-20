@@ -57,7 +57,7 @@ El precheck no se limita a leer nombres de migraciones; realiza una validación 
 
 ---
 
-## 3. Matriz de Estados de Base de Datos (Fixtures F0 a F10)
+## 3. Matriz de Estados de Base de Datos (Fixtures F0 a F11 y Resiliencia)
 
 | Fixture | Estado | Pre-check Status | Soporte | Procedimiento Operativo |
 |---|---|---|---|---|
@@ -73,6 +73,7 @@ El precheck no se limita a leer nombres de migraciones; realiza una validación 
 | **F8** | Migración con rollback registrado (G3) | `ROLLED_BACK_MIGRATIONS_IN_LEDGER` | **Bloqueado** | Abort; requiere revisión manual de estado |
 | **F9** | Base con enums/objetos sin ledger | `DB_PUSH_OR_UNTRACKED_OBJECTS` | **Bloqueado** | No se clasifica como vacía; requiere inspección de diff |
 | **F10** | Ledger completo sin tablas físicas (G5) | `CANONICAL_SCHEMA_DRIFT` | **Bloqueado** | Abort; indica inconsistencia grave entre metadatos y DDL |
+| **F11** | Simulación de excepciones normales | N/A (prueba de teardown) | Soportado | Verificación de captura de errores y purga de bases temporales |
 
 ---
 
@@ -206,7 +207,7 @@ Si una base contiene registros correspondientes a las migraciones espurias elimi
 
 ## 5. Verificación Automatizada y Regresión
 
-El proyecto incluye una suite automatizada en `backend/tests/migrations/verify-migrations.js` que reproduce y valida exhaustivamente los escenarios F0 a F10.
+El proyecto incluye una suite automatizada en `backend/tests/migrations/verify-migrations.js` que reproduce y valida exhaustivamente los escenarios F0 a F11, más el fixture F2-Mislabeled y la comprobación de supervivencia del sentinel.
 
 ### 5.1 Requisitos de Laboratorio
 - Instancia de PostgreSQL (versión 16 recomendada).
