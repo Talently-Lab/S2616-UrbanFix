@@ -3,14 +3,26 @@ import assert from 'node:assert/strict';
 import pg from 'pg';
 
 const { Client } = pg;
-const API_BASE_URL = process.env.API_BASE_URL;
-const HEALTH_URL = process.env.HEALTH_URL;
-const DATABASE_URL = process.env.DATABASE_URL;
 
-if (!API_BASE_URL || !HEALTH_URL) {
-  console.error('\n❌ ERROR: API_BASE_URL y HEALTH_URL requeridos por el arnés.');
+const rawApiBaseUrl = process.env.API_BASE_URL;
+const rawHealthUrl = process.env.HEALTH_URL;
+const rawDatabaseUrl = process.env.DATABASE_URL;
+
+const hasApi = typeof rawApiBaseUrl === 'string' && rawApiBaseUrl.trim().length > 0;
+const hasHealth = typeof rawHealthUrl === 'string' && rawHealthUrl.trim().length > 0;
+const hasDb = typeof rawDatabaseUrl === 'string' && rawDatabaseUrl.trim().length > 0;
+
+if (!hasApi || !hasHealth || !hasDb) {
+  console.error('\n❌ ERROR DE SEGURIDAD EN SUITE DE CONCURRENCIA:');
+  console.error('Las variables de entorno API_BASE_URL, HEALTH_URL y DATABASE_URL deben estar explícitamente configuradas.');
+  console.error('Por directivas de aislamiento de pruebas (AGENTS.md), la suite prohíbe fallbacks o defaults de base de datos.');
+  console.error('Ejecute las pruebas mediante "npm test".\n');
   process.exit(1);
 }
+
+const API_BASE_URL = rawApiBaseUrl.trim();
+const HEALTH_URL = rawHealthUrl.trim();
+const DATABASE_URL = rawDatabaseUrl.trim();
 
 async function api(path, options = {}) {
   const url = path.startsWith('http') ? path : `${API_BASE_URL}${path}`;

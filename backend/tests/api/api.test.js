@@ -1319,5 +1319,78 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
         try { fs.rmSync(fixtureDir, { recursive: true, force: true }); } catch (_) {}
       }
     });
+
+    it('D1: concurrency.test.js aborta antes de HTTP o PG si DATABASE_URL está ausente, vacía o whitespace', async () => {
+      const net = await import('node:net');
+      const http = await import('node:http');
+
+      let tcpConnections = 0;
+      let httpRequests = 0;
+
+      const tcpServer = net.createServer((socket) => {
+        tcpConnections++;
+        socket.destroy();
+      });
+      await new Promise((resolve) => tcpServer.listen(0, '127.0.0.1', resolve));
+      const tcpPort = tcpServer.address().port;
+
+      const httpServer = http.createServer((req, res) => {
+        httpRequests++;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ status: 'ok' }));
+      });
+      await new Promise((resolve) => httpServer.listen(0, '127.0.0.1', resolve));
+      const httpPort = httpServer.address().port;
+
+      const concurrencyTestPath = path.join(backendRoot, 'tests/api/concurrency.test.js');
+
+      try {
+        const testCases = [
+          { name: 'ausente', dbUrl: undefined },
+          { name: 'vacía', dbUrl: '' },
+          { name: 'whitespace', dbUrl: '   \t  \n ' }
+        ];
+
+        for (const tc of testCases) {
+          const env = {
+            PATH: process.env.PATH,
+            NODE_ENV: 'test',
+            API_BASE_URL: `http://127.0.0.1:${httpPort}/api`,
+            HEALTH_URL: `http://127.0.0.1:${httpPort}/health`,
+            PGHOST: '127.0.0.1',
+            PGPORT: String(tcpPort),
+            PGUSER: 'sentinel_user',
+            PGDATABASE: 'sentinel_db'
+          };
+          if (tc.dbUrl !== undefined) {
+            env.DATABASE_URL = tc.dbUrl;
+          }
+
+          const res = spawnSync('node', [concurrencyTestPath], {
+            cwd: backendRoot,
+            env,
+            encoding: 'utf-8',
+            timeout: 5000
+          });
+
+          assert.notEqual(res.status, 0, `Caso ${tc.name} debe salir con código no cero`);
+          assert.ok(
+            res.stderr.includes('DATABASE_URL'),
+            `Caso ${tc.name} debe reportar DATABASE_URL en stderr`
+          );
+          assert.equal(
+            res.stderr.includes('sentinel_db'),
+            false,
+            `Caso ${tc.name} no debe imprimir valores sensibles en stderr`
+          );
+        }
+
+        assert.equal(tcpConnections, 0, 'No debe haber conexiones a sentinel PG*');
+        assert.equal(httpRequests, 0, 'No debe haber requests a endpoints HTTP sentinela');
+      } finally {
+        await new Promise((resolve) => tcpServer.close(resolve));
+        await new Promise((resolve) => httpServer.close(resolve));
+      }
+    });
   });
 });
