@@ -222,7 +222,7 @@ y el [reporte de validación](./backend/docs/qa/be-01-review-e826df7.md).
 No ejecutar migraciones a ciegas sobre una base que ya contiene datos.
 La suite general `npm test` de la
 [issue #10](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10) también está
-integrada localmente con aprobación técnica de QA: ejecuta 31 casos HTTP sobre
+integrada localmente con aprobación técnica de QA: ejecuta 59 casos HTTP y de configuración sobre
 PostgreSQL aislado, con generación de Prisma, migraciones y seed de laboratorio.
 Requiere Docker disponible o `TEST_DATABASE_URL` hacia un servidor exclusivo de
 pruebas; no utiliza la conexión de desarrollo como fallback. Ver el
@@ -234,11 +234,18 @@ pruebas; no utiliza la conexión de desarrollo como fallback. Ver el
 |----------|------------|
 | `DATABASE_URL` | Conexión PostgreSQL utilizada por Prisma y el adaptador `pg` |
 | `PORT` | Puerto HTTP; predeterminado `3001` |
-| `JWT_SECRET` | Clave de firma y validación de JWT; usar un valor propio y aleatorio |
+| `JWT_SECRET` | Clave obligatoria de firma/verificación JWT, mínimo 32 caracteres; rechaza el placeholder del ejemplo |
+| `JWT_EXPIRES_IN` | Duración con entero positivo y unidad `s`, `m`, `h`, `d`; predeterminado `7d` |
+| `NODE_ENV` | `development`, `test` o `production`; predeterminado `development` |
+| `CORS_ORIGINS` | Lista de orígenes HTTP(S) separados por comas; obligatoria y sin wildcard en producción |
 
-El servicio actual fija la duración del token en siete días. La validación
-obligatoria del secreto, la expiración configurable y los orígenes CORS por
-entorno se trabajan en la [issue #11](https://github.com/Talently-Lab/S2616-UrbanFix/issues/11).
+La [issue #11](https://github.com/Talently-Lab/S2616-UrbanFix/issues/11) está
+integrada localmente con [aprobación técnica de QA](./backend/docs/qa/be-03-review-4b1cc2d.md);
+esta entrega aún no tiene autorización de push. La API valida la configuración
+antes de escuchar. En desarrollo, CORS admite por defecto `localhost:5173` y
+`127.0.0.1:5173`; en producción requiere una lista explícita. Las solicitudes sin
+`Origin` siguen sujetas a autenticación y permisos. Prisma CLI y el seed no
+requieren configuración JWT ni orígenes de producción.
 El ejemplo de entorno no debe incluir credenciales reales ni prometer variables
 que todavía no consume la aplicación.
 
