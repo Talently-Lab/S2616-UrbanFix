@@ -1,0 +1,95 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Rol {
+  CLIENTE
+  TECNICO
+  ADMIN
+}
+
+enum CategoriaServicio {
+  PLOMERIA
+  ELECTRICIDAD
+  GAS
+  CARPINTERIA
+  PINTURA
+  CERRAJERIA
+  ALBANILERIA
+  OTRO
+}
+
+enum EstadoSolicitud {
+  PENDIENTE
+  ACEPTADA
+  RECHAZADA
+  EN_PROCESO
+  FINALIZADA
+  CANCELADA
+}
+
+model Usuario {
+  id                 String    @id @default(uuid())
+  email              String    @unique
+  passwordHash       String
+  nombre             String
+  celular            String?
+  rol                Rol       @default(CLIENTE)
+  lastLogin          DateTime?
+  fechaCreacion      DateTime  @default(now())
+  fechaActualizacion DateTime  @updatedAt
+
+  solicitudesComoCliente SolicitudServicio[]        @relation("SolicitudesComoCliente")
+  solicitudesComoTecnico SolicitudServicio[]        @relation("SolicitudesComoTecnico")
+  cambiosDeEstado        HistorialEstadoSolicitud[] @relation("CambiosDeEstado")
+}
+
+model HistorialEstadoSolicitud {
+  id String @id @default(uuid())
+
+  solicitudId String
+  solicitud   SolicitudServicio @relation(fields: [solicitudId], references: [id], onDelete: Cascade)
+
+  estadoAnterior EstadoSolicitud?
+  estadoNuevo    EstadoSolicitud
+  motivo         String?
+  fechaCambio    DateTime @default(now())
+
+  cambiadoPorId String
+  cambiadoPor   Usuario @relation("CambiosDeEstado", fields: [cambiadoPorId], references: [id])
+
+  @@index([solicitudId])
+}
+
+model SolicitudServicio {
+  id          String          @id @default(uuid())
+  titulo      String
+  descripcion String
+  categoria   String
+  direccion   String
+  estado      EstadoSolicitud @default(PENDIENTE)
+
+  clienteId String
+  cliente   Usuario @relation("SolicitudesComoCliente", fields: [clienteId], references: [id])
+
+  tecnicoId String?
+  tecnico   Usuario? @relation("SolicitudesComoTecnico", fields: [tecnicoId], references: [id])
+
+  fechaCreacion      DateTime  @default(now())
+  fechaAceptacion    DateTime?
+  fechaInicio        DateTime?
+  fechaFinalizacion  DateTime?
+  fechaCancelacion   DateTime?
+  motivoCancelacion  String?
+  fechaActualizacion DateTime  @updatedAt
+
+  historialEstados HistorialEstadoSolicitud[]
+
+  @@index([clienteId])
+  @@index([tecnicoId])
+  @@index([estado])
+}
