@@ -1,6 +1,7 @@
 import api, { extractErrorMessage } from './api'
 
-const MOCK_ENABLED = import.meta.env.VITE_MOCK_AUTH !== 'false'
+const MOCK_ENABLED =
+  import.meta.env.DEV && import.meta.env.VITE_MOCK_AUTH === 'true';
 const STORAGE_KEY = 'urbanfix.session'
 const MOCK_USERS_KEY = 'urbanfix.mock.users'
 
