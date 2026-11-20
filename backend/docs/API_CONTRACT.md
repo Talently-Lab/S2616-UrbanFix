@@ -92,6 +92,7 @@ Rutas públicas a nivel de raíz del servidor HTTP (fuera del prefijo `/api`):
     { "status": "unavailable", "message": "Base de datos no disponible", "timestamp": "2026-11-20T19:30:00.000Z" }
     ```
 - **Garantía de confidencialidad:** Las respuestas 503 son estrictamente mínimas y **nunca** exponen nombres de base de datos, hosts, usuarios, contraseñas, fragmentos de consultas SQL ni volcados de error interno del motor relacional.
+- **Alcance y límites de la sonda:** `/ready` comprueba la conectividad activa y la presencia física de las tablas del modelo de aplicación en el esquema `public`. No ejecuta un análisis de drift exhaustivo ni verificación de checksums de migraciones en cada petición (dicho análisis exhaustivo corresponde al paso de release mediante `npm run db:precheck`). Un resultado `200 OK` en un entorno local no certifica por sí mismo un despliegue productivo ni público.
 
 ## 2. Enums
 

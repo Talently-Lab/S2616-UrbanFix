@@ -198,7 +198,7 @@ Al consultar solicitudes, el cliente recibe estado y datos actuales del técnico
 
 ## Docker y Preparación de Despliegue (BE-06)
 
-El artefacto Docker (`backend/Dockerfile`) está construido sobre `node:24-bookworm-slim`, se ejecuta bajo un usuario no-root (`node`), instala dependencias mediante lockfile (`npm ci`) y genera Prisma Client de forma determinista sin requerir conectividad de red a bases de datos ni secretos en build.
+El artefacto Docker (`backend/Dockerfile`) está construido sobre `node:24-bookworm-slim`, se ejecuta bajo un usuario no-root (`node`), instala dependencias según `package-lock.json` verificado (`npm ci`) y genera Prisma Client de forma determinista sin requerir conectividad de red a bases de datos ni secretos en build.
 
 A diferencia de versiones preliminares, el contenedor arranca **exclusivamente el servidor HTTP** (`node src/index.js`). **No aplica migraciones ni ejecuta seeds automáticamente al iniciar**.
 
@@ -232,8 +232,11 @@ docker compose run --rm api npm run db:seed
 ```
 
 **Conexiones internas vs host:**
-- Desde el host de desarrollo (tu máquina): la base está expuesta en `127.0.0.1:5434`.
-- Desde contenedores dentro de Compose: el host es `db` y el puerto interno `5432` (`postgresql://urbanfix:urbanfix_pass@db:5432/urbanfix_db?schema=public`).
+- Desde el host de desarrollo (tu máquina): la base está expuesta en `127.0.0.1:5434` (`DATABASE_URL`).
+- Desde contenedores dentro de Compose: se utiliza `DOCKER_DATABASE_URL` hacia el host interno `db:5432`. Si la contraseña contiene caracteres reservados (`@`, `#`, `/`, `%`), debe codificarse con percent-encoding (ej. `probe%40secret%23%2F`).
+- **Seguridad en Compose:** El servicio `api` no define fallbacks para `JWT_SECRET` ni `DOCKER_DATABASE_URL`; si faltan variables obligatorias, el proceso aborta de forma segura con código 1 antes de escuchar.
+
+**Alcance de las sondas:** `/ready` verifica conectividad activa y existencia de las 4 tablas del modelo en Postgres con timeouts acotados (`<= 5s`). No realiza verificación de drift completo ni checksums en cada petición (dicha verificación corresponde a `db:precheck`). Las sondas locales no certifican aptitud productiva ni pública.
 
 ## Estado de Publicación
 

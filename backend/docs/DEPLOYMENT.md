@@ -13,8 +13,8 @@ En revisiones anteriores:
 
 ### 1.2 Principios de la Solución (BE-06)
 1. **Separación estricta de responsabilidades:** El arranque del servidor HTTP (`src/index.js`) arranca **exclusivamente** el servicio con su configuración validada. Las migraciones son un paso previo explícito de preparación/release, y el seed es un comando opcional de laboratorio.
-2. **Artefacto inmutable y determinista:** Construido sobre `node:24-bookworm-slim`, bajo usuario no-root (`node`), con dependencias congeladas por lockfile (`npm ci`) y generación de cliente Prisma sin requerir acceso a bases de datos ni secretos en build-time.
-3. **Sondas operativas duales (Liveness y Readiness):** Preservación de `/health` para liveness y adición de `/ready` con verificación real de esquema PostgreSQL y límites de timeout acotados (`<= 5s`).
+2. **Artefacto reproducible y aislado:** Construido sobre `node:24-bookworm-slim`, bajo usuario no-root (`node`), con dependencias instaladas según `package-lock.json` verificado (`npm ci`) y generación de cliente Prisma sin requerir acceso a bases de datos ni secretos en build-time.
+3. **Sondas operativas duales (Liveness y Readiness):** Preservación de `/health` para liveness y adición de `/ready` con verificación de esquema PostgreSQL y límites de timeout acotados (`<= 5s`).
 4. **Composición local versionada:** Archivo `backend/compose.yaml` estandarizado para desarrollo y validación de QA con aislamiento de volúmenes, puertos y nombres de proyecto.
 5. **Sin publicación inventada:** No se presumen proveedores cloud, dominios ni bases productivas de terceros. La publicación real se gestiona en BE-07 bajo aprobación explícita del usuario.
 
@@ -28,7 +28,7 @@ El archivo `backend/Dockerfile` implementa las siguientes características:
 - **Imagen base:** `node:24-bookworm-slim` (alineada con el entorno de desarrollo y pruebas verificado Node 24).
 - **Dependencias de sistema:** Instalación de `openssl` (requerida por el motor de Prisma) con limpieza inmediata de listas de apt (`rm -rf /var/lib/apt/lists/*`).
 - **Seguridad y privilegios:** Directorio de trabajo `/app` asignado al usuario `node` (UID/GID 1000). Todos los comandos se ejecutan bajo `USER node`.
-- **Instalación de paquetes:** `npm ci` ejecutado sobre `package.json` y `package-lock.json` para reproducibilidad bit a bit.
+- **Instalación de dependencias:** `npm ci` ejecutado sobre `package.json` y `package-lock.json` para reproducibilidad según lockfile verificado.
 - **Generación de Prisma Client:** Ejecución explícita en build-time mediante:
   ```dockerfile
   RUN DATABASE_URL="postgresql://x:x@localhost:5432/x" npx prisma generate
@@ -73,230 +73,204 @@ Al iniciar el proceso de la API (`src/index.js`), el módulo `src/config/env.js`
 | Variable | Tipo / Regla | Propósito / Comportamiento |
 |---|---|---|
 | `NODE_ENV` | `development` \| `test` \| `production` | Modo de entorno. Predeterminado: `development`. En `production` impone restricciones estrictas de CORS. |
-| `DATABASE_URL` | URL PostgreSQL válida (`postgres://` o `postgresql://`) | Conexión obligatoria a PostgreSQL. Debe incluir host y nombre de base de datos. Se sanitizan contraseñas en logs. |
+| `DATABASE_URL` | URL PostgreSQL válida (`postgres://` o `postgresql://`) | Conexión obligatoria a PostgreSQL para el proceso. En Compose se alimenta de `DOCKER_DATABASE_URL`. |
+| `DOCKER_DATABASE_URL` | URL PostgreSQL con percent-encoding | Conexión interna para contenedores hacia `db:5432`. Se documenta en `.env.example` para su consumo en Compose. |
 | `PORT` | Entero entre `1` y `65535` | Puerto de escucha HTTP. Predeterminado: `3001`. |
-| `JWT_SECRET` | String (mínimo 32 caracteres) | Secreto criptográfico obligatorio para firma y verificación de tokens. Se rechaza el valor placeholder de ejemplo. |
+| `JWT_SECRET` | String (mínimo 32 caracteres) | Secreto criptográfico obligatorio para firma y verificación de tokens. No posee valor por defecto en Compose; si falta, aborta con código 1. |
 | `JWT_EXPIRES_IN` | String con unidad explícita (`s`, `m`, `h`, `d`) | Tiempo de validez del JWT (ej. `30s`, `15m`, `1h`, `7d`). Predeterminado: `7d`. No admite enteros sin unidad. |
 | `CORS_ORIGINS` | Lista separada por comas de URLs HTTP(S) | Allowlist de orígenes autorizados para CORS. En `production` es obligatoria y no admite `*` ni `null`. En `development` usa por defecto `http://localhost:5173,http://127.0.0.1:5173`. |
 
+### 3.1 Manejo de Caracteres Especiales en Contraseñas (Percent-Encoding)
+Si la contraseña de PostgreSQL contiene caracteres reservados de URL (`@`, `#`, `/`, `:`, `%`, etc., por ejemplo `probe@secret#/`):
+1. **Contenedor PostgreSQL:** Recibe la contraseña cruda sin codificar (ej. `POSTGRES_PASSWORD="probe@secret#/"`).
+2. **Cadenas de Conexión (`DATABASE_URL` y `DOCKER_DATABASE_URL`):** La contraseña debe codificarse según el estándar RFC 3986 mediante percent-encoding:
+   - `@` se codifica como `%40`
+   - `#` se codifica como `%23`
+   - `/` se codifica como `%2F`
+   - Ejemplo resultante: `DOCKER_DATABASE_URL="postgresql://urbanfix:probe%40secret%23%2F@db:5432/urbanfix_db?schema=public"`
+Al conectarse, el driver `pg` decodifica automáticamente las credenciales, asegurando una autenticación exitosa sin ambigüedades en el host ni en la base de datos.
+
 ---
 
-## 4. Ciclo de Preparación y Release (Paso a Paso)
+## 4. Flujo Operativo Principal con Docker Compose (`backend/compose.yaml`)
 
-El despliegue de una nueva versión o el aprovisionamiento de un entorno sigue estrictamente cuatro fases secuenciales:
+El flujo recomendado utiliza Docker Compose para orquestar la base de datos y la API en una misma red puente (`default`), con configuración homogénea y reproducible.
 
-```
-+-------------------+      +-----------------------+      +-------------------+      +-----------------------+
-|  1. db:precheck   | ---> | 2. prisma migrate dep | ---> | 3. Iniciar API    | ---> | 4. Seed Demostración  |
-|  (Solo lectura)   |      |    (Paso de release)  |      |    (npm start)    |      |    (Exclusivo lab)    |
-+-------------------+      +-----------------------+      +-------------------+      +-----------------------+
-```
-
-### Paso 1: Verificación de Estado (`db:precheck`)
-Antes de ejecutar cualquier comando de mutación o despliegue, ejecutar la utilidad de diagnóstico:
+### Paso 1: Configurar Variables
+Crear `backend/.env` a partir de `backend/.env.example`:
 ```bash
-# Desde contenedor Docker:
-docker run --rm --network host --env-file .env urbanfix-backend npm run db:precheck
-
-# O en entorno local:
-npm run db:precheck
+cp .env.example .env
 ```
-- Si reporta `CLEAN_DATABASE`: la base está vacía en `public`, apta para aplicar migraciones canónicas directas.
-- Si reporta `CANONICAL_FULLY_UPDATED`: la base ya contiene las 3 migraciones canónicas y no requiere cambios de DDL.
-- Si reporta `CANONICAL_INITIAL_NEEDS_UPGRADE`: base preexistente de semana 3; **no aplicar migrate directo**, seguir el procedimiento conservador de `MIGRATION_GUIDE.md`.
-- Si reporta estados bloqueados (`CHECKSUM_MISMATCH`, `FAILED_MIGRATION_PENDING`, `LEGACY_UNSUPPORTED`): abortar el despliegue.
+Asegurarse de definir `JWT_SECRET` con un secreto seguro de al menos 32 caracteres y revisar `DOCKER_DATABASE_URL`.
 
-### Paso 2: Aplicación Explícita de Migraciones
-Una vez validado el estado, ejecutar el comando de release:
+### Paso 2: Construir la Imagen
 ```bash
-# Desde contenedor Docker:
-docker run --rm --network host --env-file .env urbanfix-backend npx prisma migrate deploy
+docker compose build
+```
 
-# O con Compose:
+### Paso 3: Iniciar la Base de Datos
+```bash
+docker compose up -d db
+```
+El contenedor PostgreSQL 16 Alpine arrancará y ejecutará su healthcheck interno (`pg_isready`). Esperar a que su estado sea `healthy` antes de continuar:
+```bash
+docker compose ps db
+```
+
+### Paso 4: Pre-check de Estado de Base de Datos
+Ejecutar la herramienta de diagnóstico de solo lectura dentro de la misma red de Compose:
+```bash
+docker compose run --rm api npm run db:precheck
+```
+- Debe reportar `CLEAN_DATABASE` (exit 0) sobre una base recién creada, o `CANONICAL_FULLY_UPDATED` sobre una base al día.
+- Si reporta `CANONICAL_INITIAL_NEEDS_UPGRADE`, seguir el procedimiento conservador de `MIGRATION_GUIDE.md` antes de migrar.
+
+### Paso 5: Aplicar Migraciones Canónicas (Paso de Release)
+```bash
 docker compose run --rm api npm run db:migrate
 ```
-- Aplica ordenadamente las migraciones canónicas:
-  1. `20261007000000_init`
-  2. `20261011212651_add_last_login_to_usuario`
-  3. `20261011230000_feat_rechazo_vuelve_a_pendiente`
-- La ejecución repetida es **idempotente** e informa: `No pending migrations to apply`.
+Aplica de forma secuencial e idempotente las 3 migraciones canónicas:
+1. `20261007000000_init`
+2. `20261011212651_add_last_login_to_usuario`
+3. `20261011230000_feat_rechazo_vuelve_a_pendiente`
 
-### Paso 3: Arranque de la API
-Iniciar el servicio HTTP:
+### Paso 6: Iniciar el Servicio API
 ```bash
-# Directo con Docker:
-docker run -d --name urbanfix-api -p 3001:3001 --env-file .env urbanfix-backend
-
-# Con Compose:
 docker compose up -d api
 ```
-- La API arranca validando la configuración en memoria.
-- No altera tablas ni usuarios en la base de datos.
-- Las sondas `/health` y `/ready` pasan a estar disponibles de inmediato.
+La API arranca y escucha en `127.0.0.1:3001` sin sembrar datos ni aplicar DDL.
 
-### Paso 4: Carga de Datos de Demostración (Opcional, Exclusivo de Laboratorio)
-Solo en entornos locales o de pruebas donde se requieran los usuarios de prueba:
+### Paso 7: Comprobar Sondas Operativas
+```bash
+curl --fail http://127.0.0.1:3001/health
+curl --fail http://127.0.0.1:3001/ready
+```
+- `/health` responde `200` con `{ "status": "ok", "timestamp": "..." }`.
+- `/ready` responde `200` con `{ "status": "ready", "timestamp": "..." }`.
+- La base contiene 0 usuarios creados automáticamente.
+
+### Paso 8: Carga Opcional de Datos Demo (Solo Laboratorio)
+Exclusivamente si se requiere probar flujos de usuario en entorno de desarrollo local:
 ```bash
 docker compose run --rm api npm run db:seed
-# o localmente:
-npm run db:seed
 ```
-- Crea mediante `upsert` los usuarios demo (`juan@mail.com`, `carlos@mail.com`, `admin@mail.com` con password `MinimoOchoCaracteres`).
-- **PROHIBIDO** ejecutar en entornos productivos.
+
+### Paso 9: Detención, Reinicio y Persistencia
+- Reiniciar API: `docker compose restart api`
+- Detener stack conservando datos: `docker compose stop` o `docker compose down` (el volumen `db-data` se preserva intacto).
+- **ADVERTENCIA:** No utilizar `docker compose down -v` salvo que se desee purgar explícitamente la base de datos de pruebas.
 
 ---
 
-## 5. Sondas de Supervisión Operativa (Liveness y Readiness)
+## 5. Flujo Operativo Secundario: Docker Directo (Sin Compose)
 
-UrbanFix implementa dos sondas HTTP públicas a nivel de raíz:
+Para entornos donde no se utilice Docker Compose, debe emplearse una red Docker propia dedicada para que todas las fases compartan la misma resolución de nombres y conectividad.
 
-### 5.1 Liveness Probe: `GET /health`
-- **Función:** Monitoreo del ciclo de vida del proceso Node.js / Express.
-- **Comportamiento:** Responde `200 OK` mientras el servidor HTTP esté escuchando eventos.
-- **Independencia:** No ejecuta consultas a PostgreSQL. Si la base de datos está caída o detenida, `/health` continúa respondiendo `200 OK`, permitiendo al orquestador saber que el contenedor no está congelado ni en bucle infinito.
-- **Payload:**
-  ```json
-  { "status": "ok", "timestamp": "2026-11-20T19:33:35.491Z" }
-  ```
+```bash
+# 1. Crear red y volumen dedicados
+docker network create urbanfix-net
+docker volume create urbanfix-db-data
 
-### 5.2 Readiness Probe: `GET /ready`
-- **Función:** Comprobación estricta de aptitud para recibir tráfico de usuarios.
-- **Verificación real:** Ejecuta una consulta ligera mediante el singleton de Prisma (`prisma.$queryRaw`) comprobando la existencia física de las 4 tablas de la aplicación en el esquema `public`:
+# 2. Construir la imagen con tag específico
+docker build -t urbanfix-backend:latest .
+
+# 3. Iniciar PostgreSQL 16 Alpine en la red dedicada
+docker run -d --name urbanfix-postgres \
+  --network urbanfix-net \
+  -v urbanfix-db-data:/var/lib/postgresql/data \
+  -e POSTGRES_USER=urbanfix \
+  -e POSTGRES_PASSWORD=urbanfix_pass \
+  -e POSTGRES_DB=urbanfix_db \
+  postgres:16-alpine
+
+# Esperar a que PostgreSQL acepte conexiones
+until docker exec urbanfix-postgres pg_isready -U urbanfix -d urbanfix_db; do
+  sleep 1
+done
+
+# 4. Precheck de estado (en la misma red urbanfix-net)
+docker run --rm --network urbanfix-net \
+  -e DATABASE_URL="postgresql://urbanfix:urbanfix_pass@urbanfix-postgres:5432/urbanfix_db?schema=public" \
+  urbanfix-backend:latest npm run db:precheck
+
+# 5. Aplicar migraciones canónicas (en la misma red urbanfix-net)
+docker run --rm --network urbanfix-net \
+  -e DATABASE_URL="postgresql://urbanfix:urbanfix_pass@urbanfix-postgres:5432/urbanfix_db?schema=public" \
+  urbanfix-backend:latest npx prisma migrate deploy
+
+# 6. Iniciar la API (en la misma red urbanfix-net, publicando el puerto al host)
+docker run -d --name urbanfix-api \
+  --network urbanfix-net \
+  -p 127.0.0.1:3001:3001 \
+  -e NODE_ENV=development \
+  -e DATABASE_URL="postgresql://urbanfix:urbanfix_pass@urbanfix-postgres:5432/urbanfix_db?schema=public" \
+  -e PORT=3001 \
+  -e JWT_SECRET="un_secreto_seguro_de_mas_de_32_caracteres_longitud" \
+  -e CORS_ORIGINS="http://localhost:5173,http://127.0.0.1:5173" \
+  urbanfix-backend:latest
+
+# 7. Verificar sondas
+curl --fail http://127.0.0.1:3001/health
+curl --fail http://127.0.0.1:3001/ready
+```
+
+### 5.1 Procedimiento de Rollback Seguro de la API (Sin Conflicto de Nombre)
+Si la versión desplegada de la API presenta problemas y se desea volver a una imagen anterior:
+```bash
+# 1. Detener y remover el contenedor actual para liberar el nombre del recurso
+docker stop urbanfix-api && docker rm urbanfix-api
+# (O alternativamente en un solo paso: docker rm -f urbanfix-api)
+
+# 2. Desplegar la imagen previa aprobada utilizando el mismo nombre y configuración
+docker run -d --name urbanfix-api \
+  --network urbanfix-net \
+  -p 127.0.0.1:3001:3001 \
+  -e NODE_ENV=development \
+  -e DATABASE_URL="postgresql://urbanfix:urbanfix_pass@urbanfix-postgres:5432/urbanfix_db?schema=public" \
+  -e PORT=3001 \
+  -e JWT_SECRET="un_secreto_seguro_de_mas_de_32_caracteres_longitud" \
+  urbanfix-backend:<tag_anterior>
+
+# 3. Comprobar recuperación
+curl --fail http://127.0.0.1:3001/ready
+```
+
+---
+
+## 6. Sondas de Supervisión y Alcance Técnico (`/health` vs `/ready`)
+
+### 6.1 `GET /health` (Liveness)
+- Verifica únicamente que el hilo principal del proceso Node.js responde y acepta conexiones HTTP.
+- Devuelve `200 OK` incluso si PostgreSQL está caído o desconectado.
+- Evita que los orquestadores reinicien innecesariamente la API durante una indisponibilidad transitoria de la base de datos.
+
+### 6.2 `GET /ready` (Readiness)
+- Verifica que el servicio está preparado para atender peticiones de negocio consultando activamente a PostgreSQL a través del singleton de Prisma (`prisma.$queryRaw`).
+- Comprueba la existencia de las 4 tablas esenciales del modelo de aplicación en el esquema `public`:
   - `Usuario`
   - `SolicitudServicio`
   - `HistorialEstadoSolicitud`
   - `RechazoSolicitud`
-- **Códigos de Respuesta:**
-  - `200 OK`: PostgreSQL responde y el esquema de la aplicación está preparado. La ausencia de filas de datos en una base migrada vacía es completamente válida.
-    ```json
-    { "status": "ready", "timestamp": "2026-11-20T19:33:44.694Z" }
-    ```
-  - `503 Service Unavailable`: Emitido si:
-    a) PostgreSQL no está accesible o la conexión supera el timeout (`status: unavailable`, `message: Base de datos no disponible`).
-    b) La base está vacía o faltan tablas requeridas (`status: unavailable`, `message: Esquema de base de datos no preparado`).
-- **Límites de Timeout (Driver y Query):**
-  - `connectionTimeoutMillis: 5000` configurado en `PrismaPg`: si el servidor PostgreSQL no responde o hay problemas de conectividad de red, la llamada aborta en `<= 5 segundos`.
-  - `statement_timeout: 5000`: cancela sentencias SQL individuales que superen los 5 segundos, evitando consultas colgadas en segundo plano.
-  - No crea instancias efímeras de `PrismaClient` ni utiliza `Promise.race` ciego que abandone conexiones activas.
-- **Recuperación Automática:** Si PostgreSQL se detiene temporalmente, `/ready` devuelve `503`. Cuando PostgreSQL se reanuda, `/ready` vuelve a responder `200 OK` de forma automática a través del pool de conexiones existente, sin requerir reinicio del proceso ni regeneración de clientes.
-- **Confidencialidad:** Las respuestas de error 503 son estrictamente genéricas y nunca exponen credenciales, nombres de bases de datos, hosts ni sintaxis SQL.
+- **Límites y alcance:** `/ready` comprueba la presencia de las tablas y la conectividad activa. **No realiza un análisis exhaustivo de columnas ni verificación de checksums de migraciones** en cada petición HTTP (dicho análisis exhaustivo corresponde al paso de release mediante `npm run db:precheck`).
+- **Comportamiento ante base vacía:** Si las migraciones no han sido aplicadas, devuelve `503 Service Unavailable` con `{ "status": "unavailable", "message": "Esquema de base de datos no preparado" }`.
+- **Comportamiento ante base con 0 filas:** Si la base fue migrada pero aún no contiene registros de usuarios ni solicitudes, responde `200 OK` normalmente (la ausencia de datos no es un error de readiness).
+- **Timeouts acotados de driver y consulta:**
+  - `connectionTimeoutMillis: 5000` en el pool de `PrismaPg`: limita los intentos de adquisición de sockets ante caídas de red o puertos mudos a un máximo de 5 segundos.
+  - `statement_timeout: 5000`: cancela sentencias SQL individuales que superen los 5 segundos.
+  - Con un timeout de cliente HTTP razonable (ej. 6 segundos), el servidor responde `503` de forma determinista antes de que el cliente agote su tiempo de espera, y no se dejan conexiones colgadas en background.
+- **Resiliencia:** Si PostgreSQL se detiene temporalmente, `/ready` devuelve `503`. Al reanudarse PostgreSQL, el pool existente restablece la conexión y `/ready` vuelve a responder `200 OK` de forma automática, sin requerir reinicio del proceso API.
+- **Confidencialidad:** Las respuestas `503` nunca exponen cadenas de conexión, contraseñas, nombres de tablas ni fragmentos de errores SQL.
 
 ---
 
-## 6. Docker Compose Local (`backend/compose.yaml`)
+## 7. Límites Técnicos y Condiciones Previas para Publicación (BE-07)
 
-El archivo `backend/compose.yaml` permite levantar el stack de backend de forma reproducible:
-
-```yaml
-services:
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-urbanfix}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-urbanfix_pass}
-      POSTGRES_DB: ${POSTGRES_DB:-urbanfix_db}
-    ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5434}:5432"
-    volumes:
-      - db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-urbanfix} -d ${POSTGRES_DB:-urbanfix_db}"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 3s
-
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    ports:
-      - "127.0.0.1:${PORT:-3001}:${PORT:-3001}"
-    environment:
-      NODE_ENV: ${NODE_ENV:-development}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-urbanfix}:${POSTGRES_PASSWORD:-urbanfix_pass}@db:5432/${POSTGRES_DB:-urbanfix_db}?schema=public
-      PORT: ${PORT:-3001}
-      JWT_SECRET: ${JWT_SECRET:-reemplazar-por-un-secreto-propio-aleatorio-32-chars-min}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
-
-volumes:
-  db-data:
-```
-
-### 6.1 Comandos Habituales
-```bash
-# Iniciar base de datos aislada
-docker compose up -d db
-
-# Aplicar migraciones
-docker compose run --rm api npm run db:migrate
-
-# Iniciar API
-docker compose up -d api
-
-# Ver logs
-docker compose logs -f api
-
-# Detener preservando datos
-docker compose stop
-
-# Detener y eliminar contenedores (conservando el volumen de datos)
-docker compose down
-
-# Eliminar contenedores y volumen (destructivo para datos de laboratorio)
-docker compose down -v
-```
-
-### 6.2 Red y Resolución de Hosts: Host vs Contenedor
-- **Herramientas en tu máquina (Prisma CLI, Node local, DBeaver):**
-  Conectan a `127.0.0.1:5434`.
-  Cadena: `postgresql://urbanfix:urbanfix_pass@localhost:5434/urbanfix_db?schema=public`
-- **Contenedores dentro de la red Compose (servicio `api`):**
-  Conectan al hostname interno `db` en el puerto PostgreSQL estándar `5432`.
-  Cadena: `postgresql://urbanfix:urbanfix_pass@db:5432/urbanfix_db?schema=public`
-
-### 6.3 Aislamiento para QA y Multi-instancia
-Para evitar colisiones entre suites de pruebas o desarrolladores, Compose admite aislar proyectos mediante el flag `-p` y variables de puerto:
-```bash
-POSTGRES_PORT=55434 PORT=35001 docker compose -p qa_run_1 up -d db
-```
-Los volúmenes y redes se nombrarán `qa_run_1_db-data` y `qa_run_1_default`, sin afectar a otras instancias activas.
-
----
-
-## 7. Procedimiento de Rollback y Recuperación
-
-### 7.1 Fallo en Migraciones de Release
-Si `prisma migrate deploy` falla durante la etapa de release:
-1. La API **no debe iniciarse**. La sonda `/ready` responderá `503` impidiendo que balanceadores deriven tráfico a una instancia sin esquema.
-2. Identificar el fallo en `_prisma_migrations` ejecutando `npm run db:precheck`.
-3. Consultar la sección de rollback y resolución de defectos en [MIGRATION_GUIDE.md](./MIGRATION_GUIDE.md).
-4. No ejecutar `prisma migrate reset` ni `prisma db push` en entornos con datos.
-
-### 7.2 Rollback de Contenedor de API
-Si la versión del código de la API presenta regresiones tras arrancar:
-1. Revertir la imagen del contenedor a la etiqueta o commit anterior aprobado:
-   ```bash
-   docker stop urbanfix-api
-   docker run -d --name urbanfix-api -p 3001:3001 --env-file .env urbanfix-backend:<tag_anterior>
-   ```
-2. Verificar que `GET /health` responda `200` y `GET /ready` responda `200`.
-
----
-
-## 8. Límites Técnicos y Condiciones Previas para Publicación (BE-07)
-
-1. **Sin URLs públicas ni infraestructura ficticia:** Este entregable (BE-06) certifica la preparación operativa local y el artefacto Docker. No define ni publica URLs públicas de demostración.
-2. **Requisitos previos para BE-07 / #15:**
-   - Aprobación explícita del usuario para contratar o aprovisionar infraestructura pública.
-   - Definición de proveedor cloud concreto (ej. VPS, PaaS).
-   - Instancia de PostgreSQL persistente y administrada con SSL habilitado.
-   - Configuración de certificados TLS/HTTPS.
-   - Origen HTTP(S) exacto de la SPA de frontend para configurar `CORS_ORIGINS`.
-3. **Control de Versiones y Git:** Todo push a GitHub requiere aprobación explícita del usuario para la rama y commits concretos presentados.
+1. **Sondas Locales vs Despliegue Público:**
+   Un resultado `200 OK` en `/health` y `/ready` en localhost o Docker Compose certifica la operabilidad del proceso y la consistencia del esquema local; **no certifica que el sistema esté listo para producción ni publicado en internet**.
+2. **Requisitos Pendientes para BE-07 / #15:**
+   - Autorización explícita del usuario para aprovisionar y publicar servicios.
+   - Definición de proveedor cloud concreto de hosting y base de datos (PostgreSQL administrado con SSL obligatorio).
+   - Configuración de certificados TLS/HTTPS y dominio público.
+   - Origen HTTP(S) definitivo de la SPA de frontend para configurar `CORS_ORIGINS`.
+3. **Control de Versiones y Git:**
+   Todo push a GitHub requiere aprobación explícita del usuario para la rama y commits concretos presentados.

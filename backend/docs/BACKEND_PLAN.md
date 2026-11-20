@@ -104,16 +104,16 @@ está integrada localmente y requiere autorización de push.
 
 ## Evidencia de BE-06
 
-Implementación de artefacto inmutable y preparación operativa (issue #14):
-- `Dockerfile` actualizado a `node:24-bookworm-slim`, usuario no-root (`node`), `npm ci` con lockfile, generación determinista de cliente Prisma sin secretos ni dependencias de red en build.
+Implementación de artefacto operativo y preparación de release (issue #14):
+- `Dockerfile` actualizado a `node:24-bookworm-slim`, usuario no-root (`node`), instalación según `package-lock.json` verificado (`npm ci`), generación determinista de cliente Prisma sin secretos ni dependencias de red en build.
 - `CMD ["node", "src/index.js"]`: arranca exclusivamente el servidor HTTP. Se eliminó la ejecución automática de `prisma migrate deploy` y `prisma/seed.js` al iniciar.
 - Copia selectiva de utilidades de precheck (`tests/migrations/migration-precheck.js` y `tests/migrations/schemas/`) excluyendo suites de tests para mantener la imagen ligera.
 - `.dockerignore` exhaustivo excluyendo `.env`, `.env.*`, logs, git y suites de tests.
-- Endpoint público `GET /ready`: realiza consulta real a PostgreSQL (`prisma.$queryRaw`) comprobando presencia de las tablas de aplicación (`Usuario`, `SolicitudServicio`, `HistorialEstadoSolicitud`, `RechazoSolicitud`). Devuelve `200` si está preparada (la ausencia de filas de datos es válida) y `503` si la base no responde o faltan tablas.
+- Endpoint público `GET /ready`: realiza consulta real a PostgreSQL (`prisma.$queryRaw`) comprobando presencia de las tablas de aplicación (`Usuario`, `SolicitudServicio`, `HistorialEstadoSolicitud`, `RechazoSolicitud`). Devuelve `200` si está preparada (la ausencia de filas de datos es válida) y `503` si la base no responde o faltan tablas. Se documenta su límite técnico: no realiza diff exhaustivo ni validación de checksums en cada petición (tarea que corresponde a `db:precheck` en release).
 - Límites de timeout: `connectionTimeoutMillis: 5000` y `statement_timeout: 5000` en adaptador PrismaPg, acotando fallos de conexión a `<= 5s` sin consultas colgadas en segundo plano.
 - Sonda `GET /health` preservada como liveness del proceso (devuelve `200` incluso con PostgreSQL caído). Ambas sondas integradas bajo política CORS existente y con respuestas 503 estrictamente sanitizadas sin filtrar credenciales ni sentencias SQL.
 - Healthcheck de contenedor integrado usando `node:http` nativo (sin dependencias externas de `curl`).
-- Archivo `backend/compose.yaml` versionado con servicios `db` (Postgres 16 Alpine con healthcheck) y `api`, volumen persistente aislado por proyecto y puertos configurables para pruebas libres de colisiones.
+- Archivo `backend/compose.yaml` versionado con servicios `db` (Postgres 16 Alpine con healthcheck) y `api`, volumen persistente aislado por proyecto y puertos configurables. Sin fallbacks de `JWT_SECRET` ni secretos inventados en `api`; soporta `DOCKER_DATABASE_URL` con percent-encoding para contraseñas con caracteres especiales.
 - Suite `npm test` ampliada de 71 a 78 tests passing (100% verde), cubriendo liveness, readiness en base migrada, readiness 503 ante falta de esquema, y timeout acotado <= 5s ante PostgreSQL inaccesible.
-- Smoke tests reales de imagen Docker y flujo completo de Compose ejecutados y aprobados con limpieza de recursos efímeros.
+- Smoke tests reales ejecutados cubriendo: startup fallido sin variables, password reservada (`probe@secret#/`), flujo homogéneo Compose, flujo directo con red propia, rollback atómico y recuperación automática de readiness.
 - Documento [DEPLOYMENT.md](./DEPLOYMENT.md) y actualizaciones en `README.md`, `.env.example` y `API_CONTRACT.md`. La entrega está integrada localmente y requiere autorización de push.

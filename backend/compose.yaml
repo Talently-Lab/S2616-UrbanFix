@@ -39,12 +39,13 @@ services:
       - "127.0.0.1:${PORT:-3001}:${PORT:-3001}"
     environment:
       NODE_ENV: ${NODE_ENV:-development}
-      # Conexión interna dentro de la red Compose (host 'db' y puerto 5432)
-      DATABASE_URL: postgresql://${POSTGRES_USER:-urbanfix}:${POSTGRES_PASSWORD:-urbanfix_pass}@db:5432/${POSTGRES_DB:-urbanfix_db}?schema=public
+      # Conexión interna para el contenedor API dentro de la red Compose (host 'db' y puerto 5432).
+      # Se provee mediante DOCKER_DATABASE_URL con percent-encoding para passwords con caracteres reservados.
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-}
       PORT: ${PORT:-3001}
-      JWT_SECRET: ${JWT_SECRET:-reemplazar-por-un-secreto-propio-aleatorio-32-chars-min}
+      JWT_SECRET: ${JWT_SECRET:-}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
     # La API arranca sin aplicar migraciones ni sembrar datos automáticamente.
     # Preparación previa: docker compose run --rm api npm run db:migrate
     # Seed opcional:      docker compose run --rm api npm run db:seed
