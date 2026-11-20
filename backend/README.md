@@ -15,7 +15,7 @@ El modelo relaciona `Usuario`, `SolicitudServicio`, `HistorialEstadoSolicitud` y
 
 ## Estado de instalación
 
-La reparación de la [issue #9](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9) está integrada en esta rama local y cuenta con [aprobación técnica de QA](./docs/qa/be-01-review-e826df7.md). Incluye instalación vacía e idempotente, validación física del esquema y actualización conservadora con datos. **Todavía no fue publicada mediante push**: clonar `main` puede recuperar el historial anterior con migraciones iniciales duplicadas.
+La reparación de la [issue #9](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9) está integrada en esta rama local y cuenta con [aprobación técnica de QA](./docs/qa/be-01-review-e826df7.md). Incluye instalación vacía e idempotente, validación física del esquema y actualización conservadora con datos. El usuario autorizó publicar esta entrega en la rama `chore/backend-orchestration`; aún no implica un merge a `main`. Clonar `main` puede recuperar el historial anterior con migraciones iniciales duplicadas. Para probar esta entrega, seleccionar `chore/backend-orchestration`.
 
 En bases existentes, `20261011212651_add_last_login_to_usuario` sigue requiriendo un procedimiento previo si hay solicitudes cargadas. Seguir la [guía de migraciones](./docs/MIGRATION_GUIDE.md) antes de aplicar cambios; no ejecutar `reset` ni `resolve` a ciegas. La guía incluye los límites conocidos del runner ante señales de interrupción.
 

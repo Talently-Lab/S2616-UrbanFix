@@ -10,8 +10,8 @@ Antigravity. QA independiente: Devin. Arquitectura y coordinación: Codex.
 
 | ID | Issue | Prioridad | Dependencias | Estado de trabajo |
 | --- | --- | --- | --- | --- |
-| BE-01 | [#9 Reparar migraciones](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9) | P0 | Ninguna | Integrada localmente; QA aprobado en e826df7; sin push ni cierre en GitHub |
-| BE-02 | [#10 Restaurar npm test](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10) | P0 | BE-01 para validación final | Integrada localmente; 31 casos HTTP y QA aprobado en 0829fc0; M1 verificado en práctica; sin push ni cierre |
+| BE-01 | [#9 Reparar migraciones](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9) | P0 | Ninguna | Integrada localmente; QA aprobado en e826df7; push de esta entrega autorizado por usuario; issue abierta |
+| BE-02 | [#10 Restaurar npm test](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10) | P0 | BE-01 para validación final | Integrada localmente; 31 casos HTTP y QA aprobado en 0829fc0; M1 verificado en práctica; push de esta entrega autorizado; issue abierta |
 | BE-03 | [#11 Entorno, JWT y CORS](https://github.com/Talently-Lab/S2616-UrbanFix/issues/11) | P1 | Coordinar tests con BE-02 | Siguiente implementación de Antigravity |
 | BE-04 | [#12 Carreras y transiciones](https://github.com/Talently-Lab/S2616-UrbanFix/issues/12) | P1 | BE-01, BE-02 | Pendiente de reproducción; corregir defectos confirmados |
 | BE-05 | [#13 Contrato y documentación](https://github.com/Talently-Lab/S2616-UrbanFix/issues/13) | P1 | BE-01, BE-02, BE-03, BE-04, BE-06 | README raíz/backend y .env.example completos; falta consolidar contrato y comportamiento final |
@@ -75,3 +75,10 @@ Persiste un límite teórico no reproducido durante CREATE DATABASE en vuelo;
 no se promete limpieza ante SIGKILL o caída del host. El filtro de rol en el
 listado de usuarios no forma parte del requerimiento; la idempotencia del
 seed se verifica en test:migrations, no se duplica en cada corrida HTTP.
+
+## Entrega autorizada por el usuario
+
+El usuario autorizó el commit y push de la entrega actual de BE-01/BE-02 y
+documentación a la rama `chore/backend-orchestration`. BE-03 sigue en su
+workspace de desarrollo y queda fuera de esta publicación. Esta autorización
+no incluye merge a `main`, despliegue ni pushes futuros de nuevas entregas.

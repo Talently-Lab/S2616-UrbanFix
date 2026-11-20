@@ -216,8 +216,8 @@ migraciones, seed explícito y arranque con `npm run dev` desde `backend/`.
 
 **Estado de las migraciones:** la reparación de la
 [issue #9](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9) está integrada
-en esta rama local con aprobación técnica de QA; el push queda pendiente de
-aprobación del usuario. Ver la [guía de migraciones](./backend/docs/MIGRATION_GUIDE.md)
+en la rama de entrega `chore/backend-orchestration` con aprobación técnica de
+QA. El usuario autorizó el push de esta entrega; no implica un merge a `main`. Ver la [guía de migraciones](./backend/docs/MIGRATION_GUIDE.md)
 y el [reporte de validación](./backend/docs/qa/be-01-review-e826df7.md).
 No ejecutar migraciones a ciegas sobre una base que ya contiene datos.
 La suite general `npm test` de la

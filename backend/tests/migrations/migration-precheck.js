@@ -104,8 +104,8 @@ export async function inspectDatabaseState(connectionString) {
     // 2. Verificar si existe la tabla public._prisma_migrations de forma cualificada
     const regCheck = await client.query(`
       SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_schema = 'public' 
+        SELECT FROM information_schema.tables
+        WHERE table_schema = 'public'
         AND table_name = '_prisma_migrations'
       ) as exists;
     `);
@@ -114,18 +114,18 @@ export async function inspectDatabaseState(connectionString) {
 
     // 3. Comprobar tablas en esquema public (excluyendo únicamente public._prisma_migrations)
     const tablesCheck = await client.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public' 
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
       AND table_name != '_prisma_migrations';
     `);
     const userTables = tablesCheck.rows.map(r => r.table_name);
 
     // 4. Comprobar tipos de datos / enums en esquema public
     const enumsCheck = await client.query(`
-      SELECT t.typname 
-      FROM pg_type t 
-      JOIN pg_namespace n ON n.oid = t.typnamespace 
+      SELECT t.typname
+      FROM pg_type t
+      JOIN pg_namespace n ON n.oid = t.typnamespace
       WHERE n.nspname = 'public' AND t.typtype = 'e';
     `);
     const userEnums = enumsCheck.rows.map(r => r.typname);

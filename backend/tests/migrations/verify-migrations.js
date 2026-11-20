@@ -135,7 +135,7 @@ async function createIsolatedTestDatabase(label) {
   }
   const runId = crypto.randomUUID().replace(/-/g, '').slice(0, 10);
   const dbName = `uf_${label}_${runId}`;
-  
+
   // Registro anticipado para cubrir ventana de operación en vuelo
   createdDatabases.add(dbName);
   try {
@@ -364,7 +364,7 @@ async function main() {
     try {
       await client2Fixture.query(`
         INSERT INTO "Usuario" ("id", "email", "passwordHash", "nombre", "celular", "rol", "fechaCreacion", "fechaActualizacion")
-        VALUES 
+        VALUES
           ('11111111-0000-0000-0000-000000000001', 'cliente_fuga@mail.com', 'hash1', 'Pedro Cliente', '111111', 'CLIENTE', now(), now()),
           ('22222222-0000-0000-0000-000000000002', 'tecnico_gas@mail.com', 'hash2', 'Mario Gasista', '222222', 'TECNICO', now(), now());
 
@@ -796,7 +796,7 @@ async function main() {
           applied_steps_count INTEGER NOT NULL DEFAULT 0
         );
         INSERT INTO public._prisma_migrations (id, checksum, finished_at, migration_name, applied_steps_count)
-        VALUES 
+        VALUES
           (gen_random_uuid()::text, '${computeMigrationChecksum('20261007000000_init')}', now(), '20261007000000_init', 1),
           (gen_random_uuid()::text, '${computeMigrationChecksum('20261011212651_add_last_login_to_usuario')}', now(), '20261011212651_add_last_login_to_usuario', 1),
           (gen_random_uuid()::text, '${computeMigrationChecksum('20261011230000_feat_rechazo_vuelve_a_pendiente')}', now(), '20261011230000_feat_rechazo_vuelve_a_pendiente', 1);
