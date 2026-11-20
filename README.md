@@ -209,8 +209,10 @@ instalación con `npm ci`, configuración a partir de
 migraciones, seed explícito y arranque con `npm run dev` desde `backend/`.
 
 - API local: `http://localhost:3001/api`.
-- Health local: `http://localhost:3001/health`. Comprueba que responde el proceso;
-  no acredita por sí solo la conexión a PostgreSQL.
+- Liveness local: `http://localhost:3001/health`, comprueba que responde el proceso.
+- Readiness local: `http://localhost:3001/ready`, comprueba PostgreSQL y la existencia
+  de las tablas requeridas; devuelve `503` si no están disponibles. No sustituye
+  la validación completa de migraciones.
 - Contrato de rutas, cuerpos y permisos: [API_CONTRACT.md](./backend/docs/API_CONTRACT.md).
 - Plan de correcciones y dependencias: [BACKEND_PLAN.md](./backend/docs/BACKEND_PLAN.md).
 
@@ -222,7 +224,7 @@ y el [reporte de validación](./backend/docs/qa/be-01-review-e826df7.md).
 No ejecutar migraciones a ciegas sobre una base que ya contiene datos.
 La suite general `npm test` de la
 [issue #10](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10) también está
-integrada localmente con aprobación técnica de QA: ejecuta 71 casos HTTP, de configuración y concurrencia sobre
+integrada localmente con aprobación técnica de QA: ejecuta 78 casos HTTP, de configuración, concurrencia y disponibilidad sobre
 PostgreSQL aislado, con generación de Prisma, migraciones y seed de laboratorio.
 Requiere Docker disponible o `TEST_DATABASE_URL` hacia un servidor exclusivo de
 pruebas; no utiliza la conexión de desarrollo como fallback. Ver el
@@ -233,11 +235,18 @@ integrada localmente con [aprobación de QA](./backend/docs/qa/be-04-review-4a1a
 las acciones concurrentes sobre solicitudes se serializan bajo bloqueo de fila,
 con permisos y estado revalidados en la transacción. La entrega aún no está publicada.
 
+La [issue #14](https://github.com/Talently-Lab/S2616-UrbanFix/issues/14) está
+integrada localmente con [aprobación de QA](./backend/docs/qa/be-06-review-84d5db6.md):
+Docker usa Node 24 y usuario no root; inicia solo la API. Las migraciones y el seed
+son operaciones explícitas. Ver la [guía operativa](./backend/docs/DEPLOYMENT.md)
+y [Compose local](./backend/compose.yaml). Esta entrega aún no está publicada.
+
 ### Variables de entorno
 
 | Variable | Uso actual |
 |----------|------------|
-| `DATABASE_URL` | Conexión PostgreSQL utilizada por Prisma y el adaptador `pg` |
+| `DATABASE_URL` | Conexión PostgreSQL desde el host utilizada por Prisma y el adaptador `pg` |
+| `DOCKER_DATABASE_URL` | Conexión interna de Compose hacia `db:5432`, con credenciales percent-encoded |
 | `PORT` | Puerto HTTP; predeterminado `3001` |
 | `JWT_SECRET` | Clave obligatoria de firma/verificación JWT, mínimo 32 caracteres; rechaza el placeholder del ejemplo |
 | `JWT_EXPIRES_IN` | Duración con entero positivo y unidad `s`, `m`, `h`, `d`; predeterminado `7d` |

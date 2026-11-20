@@ -14,7 +14,7 @@ Antigravity. QA independiente: Devin. Arquitectura y coordinación: Codex.
 | BE-02 | [#10 Restaurar npm test](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10) | P0 | BE-01 para validación final | Integrada localmente; 31 casos HTTP y QA aprobado en 0829fc0; M1 verificado en práctica; push de esta entrega autorizado; issue abierta |
 | BE-03 | [#11 Entorno, JWT y CORS](https://github.com/Talently-Lab/S2616-UrbanFix/issues/11) | P1 | Coordinar tests con BE-02 | Integrada localmente; QA aprobado en 4b1cc2d, 59 tests; sin autorización de nuevo push |
 | BE-04 | [#12 Carreras y transiciones](https://github.com/Talently-Lab/S2616-UrbanFix/issues/12) | P1 | BE-01, BE-02 | Integrada localmente; QA aprobado en 4a1afab, 71 tests; sin aprobación de push |
-| BE-05 | [#13 Contrato y documentación](https://github.com/Talently-Lab/S2616-UrbanFix/issues/13) | P1 | BE-01, BE-02, BE-03, BE-04, BE-06 | README raíz/backend y .env.example completos; falta consolidar contrato y comportamiento final |
+| BE-05 | [#13 Contrato y documentación](https://github.com/Talently-Lab/S2616-UrbanFix/issues/13) | P1 | BE-01, BE-02, BE-03, BE-04, BE-06 | Siguiente: consolidar contrato completo y docs; corregir E1/E2 del QA de BE-06 |
 | BE-06 | [#14 Docker y preparación de despliegue](https://github.com/Talently-Lab/S2616-UrbanFix/issues/14) | P1 | BE-01, BE-03 | Implementada localmente; Dockerfile Node 24 slim no-root sin auto-migrate/seed, compose.yaml, GET /ready y timeouts <=5s, 78 tests; pendiente validación QA Devin |
 | BE-07 | [#15 Publicación y verificación pública](https://github.com/Talently-Lab/S2616-UrbanFix/issues/15) | P1 | BE-01 a BE-06, QA aprobado | Bloqueada hasta definir infraestructura y autorizar publicación concreta |
 
@@ -117,3 +117,13 @@ Implementación de artefacto operativo y preparación de release (issue #14):
 - Suite `npm test` ampliada de 71 a 78 tests passing (100% verde), cubriendo liveness, readiness en base migrada, readiness 503 ante falta de esquema, y timeout acotado <= 5s ante PostgreSQL inaccesible.
 - Smoke tests reales ejecutados cubriendo: startup fallido sin variables, password reservada (`probe@secret#/`), flujo homogéneo Compose, flujo directo con red propia, rollback atómico y recuperación automática de readiness.
 - Documento [DEPLOYMENT.md](./DEPLOYMENT.md) y actualizaciones en `README.md`, `.env.example` y `API_CONTRACT.md`. La entrega está integrada localmente y requiere autorización de push.
+
+## Evidencia de BE-06
+
+La revisión [be-06-review-84d5db6.md](./qa/be-06-review-84d5db6.md) aprueba
+78 tests, build no-root, arranque sin DDL/seed, release explícito, contraseñas
+con caracteres reservados y rollback. La pausa de PostgreSQL dio respuestas
+503 alrededor de 4.005–4.012s, liveness200 y recuperación sin reinicio de API.
+Los timeouts son de 4s por fase; la precisión del wording y la diferencia entre
+comillas en Compose y Docker CLI se consolidan en BE-05. No hay despliegue
+público ni autorización de nuevo push.
