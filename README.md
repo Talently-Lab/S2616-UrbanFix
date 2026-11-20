@@ -222,11 +222,16 @@ y el [reporte de validación](./backend/docs/qa/be-01-review-e826df7.md).
 No ejecutar migraciones a ciegas sobre una base que ya contiene datos.
 La suite general `npm test` de la
 [issue #10](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10) también está
-integrada localmente con aprobación técnica de QA: ejecuta 59 casos HTTP y de configuración sobre
+integrada localmente con aprobación técnica de QA: ejecuta 71 casos HTTP, de configuración y concurrencia sobre
 PostgreSQL aislado, con generación de Prisma, migraciones y seed de laboratorio.
 Requiere Docker disponible o `TEST_DATABASE_URL` hacia un servidor exclusivo de
 pruebas; no utiliza la conexión de desarrollo como fallback. Ver el
 [reporte de QA](./backend/docs/qa/be-02-review-0829fc0.md).
+
+La [issue #12](https://github.com/Talently-Lab/S2616-UrbanFix/issues/12) está
+integrada localmente con [aprobación de QA](./backend/docs/qa/be-04-review-4a1afab.md):
+las acciones concurrentes sobre solicitudes se serializan bajo bloqueo de fila,
+con permisos y estado revalidados en la transacción. La entrega aún no está publicada.
 
 ### Variables de entorno
 

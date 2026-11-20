@@ -149,7 +149,7 @@ Ejecutar desde `backend/`:
 | `npm run db:migrate` | `prisma migrate deploy`; respetar los límites de #9. |
 | `npm run db:seed` / `npm run seed` | Seed explícito de demostración. |
 | `npm run db:studio` | Abre Prisma Studio con la base configurada. |
-| `npm test` | Suite de integración HTTP en `tests/api/runner.js`. Levanta PostgreSQL aislado (Docker efímero `postgres:16-alpine` o `TEST_DATABASE_URL`), aplica migraciones canónicas (`prisma migrate deploy`), seed de laboratorio, API en puerto libre y suite de 31 casos. Teardown automático. |
+| `npm test` | Suite de integración HTTP en `tests/api/runner.js`. Levanta PostgreSQL aislado (Docker efímero `postgres:16-alpine` o `TEST_DATABASE_URL`), aplica migraciones canónicas (`prisma migrate deploy`), seed de laboratorio, API en puerto libre y suite de 71 casos. Teardown automático. |
 
 Están disponibles `db:precheck` y `test:migrations`; consultar la [guía de migraciones](./docs/MIGRATION_GUIDE.md) para ejecutarlos. `test:migrations` exige `TEST_DATABASE_URL` explícita hacia PostgreSQL exclusivo de laboratorio con privilegio `CREATEDB`. `npm test` utiliza Docker efímero automáticamente si está disponible, o `TEST_DATABASE_URL` si se especifica; si ninguno está disponible, falla con instrucciones legibles sin tocar `DATABASE_URL`. Para un script Node que no carga dotenv por sí mismo, usar `node --env-file=.env <ruta-del-script>` o exportar explícitamente las variables necesarias.
 
@@ -174,6 +174,12 @@ El [contrato de API](./docs/API_CONTRACT.md) detalla cuerpos, errores y transici
 | `GET /api/admin/usuarios`, `GET/PATCH /api/admin/usuarios/:id` | Administrador. |
 
 El administrador filtra solicitudes mediante `GET /api/solicitudes?estado=PENDIENTE` (o el estado requerido). Usuarios soporta paginación `page`/`limit`, sin filtro server-side por rol. `/api/users/me` es alias de `/api/usuarios/me`.
+
+Las acciones sobre una misma solicitud se serializan mediante bloqueo de fila y
+verificación de estado/permisos dentro de la transacción. Una operación que perdió
+su precondición devuelve `409`; los rechazos duplicados no devuelven `500`. Ver
+el [contrato de concurrencia](./docs/API_CONTRACT.md#81-reglas-de-concurrencia-y-serialización-be-04)
+y la [validación QA](./docs/qa/be-04-review-4a1afab.md).
 
 Al consultar solicitudes, el cliente recibe estado y datos actuales del técnico. No hay SSE/WebSocket: el refresco automático de pantalla depende del frontend. Este ciclo no modifica `frontend/`, `data/` ni `qa/`.
 
