@@ -78,7 +78,7 @@ export function validateNodeEnv(nodeEnvVal) {
 
   const str = String(nodeEnvVal).trim();
   if (!ALLOWED_NODE_ENVS.includes(str)) {
-    throw new ConfigError(`Variable de entorno NODE_ENV inválida: valor "${str}" no permitido (permitidos: ${ALLOWED_NODE_ENVS.join(', ')}).`);
+    throw new ConfigError(`Variable de entorno NODE_ENV inválida: valor no permitido (permitidos: ${ALLOWED_NODE_ENVS.join(', ')}).`);
   }
 
   return str;
@@ -170,41 +170,43 @@ export function validateCorsOrigins(corsOriginsVal, nodeEnv = 'development') {
   const rawEntries = String(corsOriginsVal).split(',');
   const normalizedOrigins = [];
 
-  for (const rawEntry of rawEntries) {
+  for (let i = 0; i < rawEntries.length; i++) {
+    const rawEntry = rawEntries[i];
     const entry = rawEntry.trim();
+    const pos = i + 1;
     if (!entry) {
-      throw new ConfigError('Variable de entorno CORS_ORIGINS inválida: contiene entradas vacías entre comas.');
+      throw new ConfigError(`Variable de entorno CORS_ORIGINS inválida: entrada ${pos} vacía entre comas.`);
     }
 
     if (entry === '*' || entry === 'null' || entry.includes('*')) {
-      throw new ConfigError('Variable de entorno CORS_ORIGINS inválida: no se permite "*" ni "null" en la allowlist.');
+      throw new ConfigError(`Variable de entorno CORS_ORIGINS inválida: entrada ${pos} no puede ser "*" ni "null".`);
     }
 
     let parsed;
     try {
       parsed = new URL(entry);
     } catch (_) {
-      throw new ConfigError(`Variable de entorno CORS_ORIGINS inválida: "${entry}" no es una URL válida.`);
+      throw new ConfigError(`Variable de entorno CORS_ORIGINS inválida: entrada ${pos} no es una URL válida.`);
     }
 
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      throw new ConfigError(`Variable de entorno CORS_ORIGINS inválida: "${entry}" debe usar protocolo http o https.`);
+      throw new ConfigError(`Variable de entorno CORS_ORIGINS inválida: entrada ${pos} debe usar protocolo http o https.`);
     }
 
     if (parsed.pathname !== '/' && parsed.pathname !== '') {
-      throw new ConfigError(`Variable de entorno CORS_ORIGINS inválida: "${entry}" no debe contener ruta/path.`);
+      throw new ConfigError(`Variable de entorno CORS_ORIGINS inválida: entrada ${pos} no debe contener ruta/path.`);
     }
 
     if (parsed.search) {
-      throw new ConfigError(`Variable de entorno CORS_ORIGINS inválida: "${entry}" no debe contener parámetros query.`);
+      throw new ConfigError(`Variable de entorno CORS_ORIGINS inválida: entrada ${pos} no debe contener parámetros query.`);
     }
 
     if (parsed.hash) {
-      throw new ConfigError(`Variable de entorno CORS_ORIGINS inválida: "${entry}" no debe contener fragmento hash.`);
+      throw new ConfigError(`Variable de entorno CORS_ORIGINS inválida: entrada ${pos} no debe contener fragmento hash.`);
     }
 
     if (parsed.username || parsed.password) {
-      throw new ConfigError(`Variable de entorno CORS_ORIGINS inválida: "${entry}" no debe incluir credenciales.`);
+      throw new ConfigError(`Variable de entorno CORS_ORIGINS inválida: entrada ${pos} no debe incluir credenciales.`);
     }
 
     const origin = parsed.origin;

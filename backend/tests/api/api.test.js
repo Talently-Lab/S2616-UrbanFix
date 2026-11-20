@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import fs from 'node:fs';
+import os from 'node:os';
 import jwt from 'jsonwebtoken';
 import {
   loadConfig,
@@ -66,13 +68,15 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
   // 1. Endpoints Públicos y Preflight CORS
   // -------------------------------------------------------------------------
   describe('1. Endpoints Públicos y CORS', () => {
-    it('GET /health sin Origin retorna 200 con status ok y timestamp ISO sin cabecera CORS', async () => {
+    it('GET /health sin Origin retorna 200 con status ok, timestamp ISO, sin allow-origin y con Vary: Origin', async () => {
       const res = await api(HEALTH_URL);
       assert.equal(res.status, 200);
       assert.equal(res.data.status, 'ok');
       assert.ok(res.data.timestamp);
       assert.ok(!isNaN(Date.parse(res.data.timestamp)));
       assert.equal(res.headers.get('access-control-allow-origin'), null);
+      const vary = res.headers.get('vary') || '';
+      assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin incluso sin Origin');
     });
 
     it('GET /health con Origin permitido (http://localhost:5173) retorna 200, su origen y Vary: Origin', async () => {
@@ -87,7 +91,7 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
       assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin');
     });
 
-    it('GET /api/categorias sin Origin retorna 200 con lista de categorías válidas', async () => {
+    it('GET /api/categorias sin Origin retorna 200 con lista de categorías válidas y Vary: Origin', async () => {
       const res = await api('/categorias');
       assert.equal(res.status, 200);
       assert.ok(Array.isArray(res.data.data));
@@ -95,6 +99,8 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
       assert.ok(res.data.data.includes('ELECTRICIDAD'));
       assert.ok(res.data.data.includes('GAS'));
       assert.equal(res.headers.get('access-control-allow-origin'), null);
+      const vary = res.headers.get('vary') || '';
+      assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin');
     });
 
     it('GET /api/categorias con segundo Origin permitido (http://127.0.0.1:5173) retorna 200, su origen y Vary: Origin', async () => {
@@ -109,7 +115,7 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
       assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin');
     });
 
-    it('OPTIONS /api/solicitudes (CORS Preflight) con Origin permitido responde 204 con métodos y headers', async () => {
+    it('OPTIONS /api/solicitudes (CORS Preflight) con Origin permitido responde 204 con métodos, headers y Vary: Origin', async () => {
       const res = await fetch(`${API_BASE_URL}/solicitudes`, {
         method: 'OPTIONS',
         signal: AbortSignal.timeout(5000),
@@ -131,18 +137,20 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
       assert.ok(allowHeaders.toLowerCase().includes('content-type'));
     });
 
-    it('Petición con Origin no permitido retorna 403 con CORS_ORIGIN_DENIED y sin cabecera allow-origin', async () => {
+    it('Petición con Origin no permitido retorna 403 con CORS_ORIGIN_DENIED, Vary: Origin y sin allow-origin', async () => {
       const res = await fetch(`${API_BASE_URL}/categorias`, {
         headers: { 'Origin': 'https://origen-no-autorizado.com' }
       });
       assert.equal(res.status, 403);
       assert.equal(res.headers.get('access-control-allow-origin'), null);
+      const vary = res.headers.get('vary') || '';
+      assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin ante origen denegado');
       const data = await res.json();
       assert.equal(data.error.code, 'CORS_ORIGIN_DENIED');
       assert.ok(data.error.message);
     });
 
-    it('Preflight OPTIONS con Origin no permitido retorna 403 con CORS_ORIGIN_DENIED y sin cabecera allow-origin', async () => {
+    it('Preflight OPTIONS con Origin no permitido retorna 403 con CORS_ORIGIN_DENIED, Vary: Origin y sin allow-origin', async () => {
       const res = await fetch(`${API_BASE_URL}/solicitudes`, {
         method: 'OPTIONS',
         headers: {
@@ -152,16 +160,20 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
       });
       assert.equal(res.status, 403);
       assert.equal(res.headers.get('access-control-allow-origin'), null);
+      const vary = res.headers.get('vary') || '';
+      assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin ante preflight denegado');
       const data = await res.json();
       assert.equal(data.error.code, 'CORS_ORIGIN_DENIED');
     });
 
-    it('Petición con Origin "null" retorna 403 con CORS_ORIGIN_DENIED y sin cabecera allow-origin', async () => {
+    it('Petición con Origin "null" retorna 403 con CORS_ORIGIN_DENIED, Vary: Origin y sin allow-origin', async () => {
       const res = await fetch(HEALTH_URL, {
         headers: { 'Origin': 'null' }
       });
       assert.equal(res.status, 403);
       assert.equal(res.headers.get('access-control-allow-origin'), null);
+      const vary = res.headers.get('vary') || '';
+      assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin ante origin null');
       const data = await res.json();
       assert.equal(data.error.code, 'CORS_ORIGIN_DENIED');
     });
@@ -1009,7 +1021,7 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
   // 8. Validación de Configuración y Aborto de Startup (BE-03)
   // -------------------------------------------------------------------------
   describe('8. Validación de Configuración y Aborto de Startup (BE-03)', () => {
-    function runStartup(envOverrides = {}) {
+    function runStartup(envOverrides = {}, options = {}) {
       const baseValidEnv = {
         PATH: process.env.PATH,
         NODE_ENV: 'test',
@@ -1027,12 +1039,19 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
         }
       }
 
-      return spawnSync('node', ['src/index.js'], {
-        cwd: backendRoot,
-        env: finalEnv,
-        encoding: 'utf-8',
-        timeout: 8000
-      });
+      // C2: Aislar cwd en directorio temporal sin .env para evitar contaminación de cargas dotenv
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'uf-startup-isolated-'));
+      const entrypoint = path.join(backendRoot, 'src/index.js');
+      try {
+        return spawnSync('node', [entrypoint], {
+          cwd: options.cwd || tempDir,
+          env: finalEnv,
+          encoding: 'utf-8',
+          timeout: 8000
+        });
+      } finally {
+        try { fs.rmSync(tempDir, { recursive: true, force: true }); } catch (_) {}
+      }
     }
 
     // 8.1 JWT_SECRET
@@ -1199,6 +1218,106 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
         assert.ok(err.message.includes('JWT_SECRET'));
         return true;
       });
+    });
+
+    // 8.7 C1: Regresión de no filtración de credenciales / query / fragmentos en CORS_ORIGINS
+    it('C1: validateCorsOrigins y startup nunca filtran contraseñas de URL en mensajes de error', () => {
+      const probePass = 'probe_secret_password_998877';
+      const probeUser = 'probe_user_112233';
+      const corsWithCreds = `https://${probeUser}:${probePass}@example.org`;
+
+      assert.throws(() => {
+        validateCorsOrigins(corsWithCreds, 'production');
+      }, (err) => {
+        assert.ok(err instanceof ConfigError);
+        assert.equal(err.message.includes(probePass), false, 'Error no debe contener la contraseña');
+        assert.equal(err.message.includes(probeUser), false, 'Error no debe contener el usuario');
+        assert.ok(err.message.includes('credenciales'));
+        assert.ok(err.message.includes('CORS_ORIGINS'));
+        return true;
+      });
+
+      const resStartup = runStartup({ CORS_ORIGINS: corsWithCreds });
+      assert.equal(resStartup.status, 1);
+      assert.equal(resStartup.stderr.includes(probePass), false, 'stderr no debe contener la contraseña');
+      assert.equal(resStartup.stderr.includes(probeUser), false, 'stderr no debe contener el usuario');
+      assert.ok(resStartup.stderr.includes('CORS_ORIGINS'));
+    });
+
+    it('C1: validateCorsOrigins y startup nunca filtran parámetros query o fragmentos hash', () => {
+      const queryToken = 'super_secret_query_token_xyz99';
+      const hashToken = 'super_secret_hash_token_abc88';
+
+      assert.throws(() => {
+        validateCorsOrigins(`https://example.org?token=${queryToken}`, 'production');
+      }, (err) => {
+        assert.equal(err.message.includes(queryToken), false, 'Error no debe contener query params');
+        assert.ok(err.message.includes('query'));
+        return true;
+      });
+
+      assert.throws(() => {
+        validateCorsOrigins(`https://example.org#token=${hashToken}`, 'production');
+      }, (err) => {
+        assert.equal(err.message.includes(hashToken), false, 'Error no debe contener hash fragment');
+        assert.ok(err.message.includes('hash'));
+        return true;
+      });
+
+      const brokenUrlWithMarker = 'not_a_valid_url_with_secret_marker_1234';
+      assert.throws(() => {
+        validateCorsOrigins(brokenUrlWithMarker, 'production');
+      }, (err) => {
+        assert.equal(err.message.includes('secret_marker_1234'), false, 'Error no debe interpolar URL rota sensible');
+        assert.ok(err.message.includes('no es una URL válida'));
+        return true;
+      });
+    });
+
+    // 8.8 C2: Aislamiento ante existencia de archivo .env del usuario con valores centinela
+    it('C2: Pruebas de variables ausentes no heredan .env externo de cwd', () => {
+      const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'uf-sentinel-env-'));
+      try {
+        fs.writeFileSync(
+          path.join(fixtureDir, '.env'),
+          [
+            'JWT_SECRET="secreto_centinela_en_archivo_dotenv_de_mas_de_32_chars"',
+            'DATABASE_URL="postgresql://sentinel_user:sentinel_pass@127.0.0.1:5432/sentinel_db_should_never_be_touched"',
+            'CORS_ORIGINS="http://localhost:5173"'
+          ].join('\n')
+        );
+
+        // Cuando la sonda se ejecuta en un directorio aislado (sin .env), la ausencia de JWT_SECRET aborta
+        const resIsolated = runStartup({ JWT_SECRET: undefined });
+        assert.equal(resIsolated.status, 1);
+        assert.ok(resIsolated.stderr.includes('JWT_SECRET'));
+      } finally {
+        try { fs.rmSync(fixtureDir, { recursive: true, force: true }); } catch (_) {}
+      }
+    });
+
+    it('C2: Entorno explícito del harness no es sobrescrito por archivo .env de usuario (sentinel)', () => {
+      const fixtureDir = fs.mkdtempSync(path.join(os.tmpdir(), 'uf-sentinel-harness-'));
+      try {
+        const sentinelDb = 'postgresql://sentinel_user:sentinel_pass@127.0.0.1:5432/sentinel_db_should_never_be_touched';
+        fs.writeFileSync(
+          path.join(fixtureDir, '.env'),
+          `DATABASE_URL="${sentinelDb}"\n`
+        );
+
+        // Si process.env ya tiene DATABASE_URL (como inyecta el harness), dotenv NO la sobrescribe
+        const explicitHarnessDb = 'postgresql://harness_override:harness_pass@127.0.0.1:5432/harness_db?schema=public';
+        const res = runStartup(
+          { DATABASE_URL: explicitHarnessDb, PORT: 'invalid_port_to_abort_safely' },
+          { cwd: fixtureDir }
+        );
+        // Aborta por PORT inválido, lo que demuestra que parseó el entorno y no tocó la base
+        assert.equal(res.status, 1);
+        assert.ok(res.stderr.includes('PORT'));
+        assert.equal(res.stderr.includes('sentinel_db_should_never_be_touched'), false);
+      } finally {
+        try { fs.rmSync(fixtureDir, { recursive: true, force: true }); } catch (_) {}
+      }
     });
   });
 });
