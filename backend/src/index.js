@@ -1,12 +1,22 @@
 import 'dotenv/config';
 import express from 'express';
-import cors from 'cors';
+import { loadConfig } from './config/env.js';
+import { createCorsMiddleware } from './middlewares/cors.middleware.js';
 import routes from './routes/index.js';
 
-const app = express();
-const PORT = process.env.PORT || 3001;
+// Validar configuración HTTP/auth/base de datos antes de escuchar
+let config;
+try {
+  config = loadConfig();
+} catch (err) {
+  console.error(err.message);
+  process.exit(1);
+}
 
-app.use(cors());
+const app = express();
+
+// CORS configurable por entorno
+app.use(createCorsMiddleware(config.cors.allowedOrigins));
 app.use(express.json());
 
 // Health check
@@ -42,6 +52,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+const server = app.listen(config.port, () => {
+  console.log(`Server running on port ${config.port}`);
 });
+
+export { app, server, config };

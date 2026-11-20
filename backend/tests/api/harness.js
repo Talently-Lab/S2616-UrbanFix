@@ -348,9 +348,12 @@ export async function startApiServer(testDbUrl) {
     cwd: backendRoot,
     env: {
       ...process.env,
+      NODE_ENV: 'test',
       PORT: String(apiPort),
       DATABASE_URL: testDbUrl,
-      JWT_SECRET: testJwtSecret
+      JWT_SECRET: testJwtSecret,
+      JWT_EXPIRES_IN: '7d',
+      CORS_ORIGINS: 'http://localhost:5173,http://127.0.0.1:5173'
     },
     detached: true,
     stdio: ['ignore', 'pipe', 'pipe']

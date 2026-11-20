@@ -53,12 +53,15 @@ Continuar cuando responda `accepting connections`. Si el contenedor ya existe, u
 Editar `.env`:
 
 ```dotenv
+NODE_ENV=development
 DATABASE_URL="postgresql://urbanfix:urbanfix_pass@localhost:5434/urbanfix_db?schema=public"
 PORT=3001
 JWT_SECRET="reemplazar-por-un-secreto-propio-aleatorio"
+JWT_EXPIRES_IN=7d
+CORS_ORIGINS="http://localhost:5173,http://127.0.0.1:5173"
 ```
 
-Generar un secreto y copiarlo a `JWT_SECRET`:
+Generar un secreto criptográfico y copiarlo a `JWT_SECRET`:
 
 ```bash
 node --input-type=module -e "import { randomBytes } from 'node:crypto'; console.log(randomBytes(32).toString('hex'))"
@@ -68,12 +71,15 @@ node --input-type=module -e "import { randomBytes } from 'node:crypto'; console.
 
 | Variable | Uso actual |
 | --- | --- |
-| `DATABASE_URL` | Conexión PostgreSQL para Prisma CLI y el adaptador de la API; el ejemplo utiliza esquema `public`. |
-| `PORT` | Puerto HTTP; predeterminado `3001`. |
-| `JWT_SECRET` | Firma y validación del JWT. Configurarlo explícitamente: el código actual todavía tiene fallback `secret`, pendiente de eliminar en #11. |
+| `NODE_ENV` | Entorno de ejecución (`development`, `test` o `production`); predeterminado `development`. |
+| `DATABASE_URL` | Conexión PostgreSQL para Prisma CLI y el adaptador de la API (requiere protocolo `postgres`/`postgresql`, host y base); el ejemplo utiliza esquema `public`. |
+| `PORT` | Puerto HTTP (entero entre 1 y 65535); predeterminado `3001`. |
+| `JWT_SECRET` | Firma y validación de tokens JWT. Obligatorio (mínimo 32 caracteres). Se eliminaron todos los fallbacks débiles y se rechaza el placeholder de ejemplo al arrancar. |
+| `JWT_EXPIRES_IN` | Duración del JWT con unidad explícita (`s`, `m`, `h`, `d`, ej. `30m`, `1h`, `7d`); predeterminado `7d`. |
+| `CORS_ORIGINS` | Allowlist de orígenes HTTP(S) separados por comas, sin path ni query. En `development` y `test`, si se omite, usa `http://localhost:5173,http://127.0.0.1:5173`. En `production`, exige una lista explícita no vacía (no admite `*` ni `null`). Peticiones sin `Origin` (curl, health checks, server-to-server) se admiten normalmente. |
 | `TEST_DATABASE_URL` | Variable dedicada para `test:migrations` y opcional para `npm test` (si no se usa Docker automático), hacia un servidor exclusivo de laboratorio con privilegio `CREATEDB`. Por seguridad, nunca se hace fallback automático desde `DATABASE_URL`. |
 
-`JWT_EXPIRES_IN` todavía no se consume: los tokens duran siete días por código. Tampoco hay variable de orígenes CORS consumida; `cors()` permite `*`. La configuración validada, expiración configurable y allowlist CORS se trabajan en [#11](https://github.com/Talently-Lab/S2616-UrbanFix/issues/11).
+Al arrancar la API (`src/index.js`), la configuración se valida en memoria antes de abrir puertos HTTP o conectar a la base de datos. Si una variable es inválida, el proceso aborta identificando el nombre de la variable sin exponer secretos ni contraseñas de conexión en los registros. Las tareas CLI de Prisma (`validate`, `generate`, `migrate`, `seed` y `db:precheck`) no requieren `JWT_SECRET` ni `CORS_ORIGINS`.
 
 ### 2. Preparar Prisma
 

@@ -56,7 +56,10 @@ async function runTests(apiBaseUrl, healthUrl, testDbUrl, jwtSecret) {
         API_BASE_URL: apiBaseUrl,
         HEALTH_URL: healthUrl,
         DATABASE_URL: testDbUrl,
-        JWT_SECRET: jwtSecret
+        JWT_SECRET: jwtSecret,
+        NODE_ENV: 'test',
+        JWT_EXPIRES_IN: '7d',
+        CORS_ORIGINS: 'http://localhost:5173,http://127.0.0.1:5173'
       },
       detached: true,
       stdio: 'inherit'

@@ -1,8 +1,29 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import jwt from 'jsonwebtoken';
+import {
+  loadConfig,
+  getJwtConfig,
+  validateDatabaseUrl,
+  validatePort,
+  validateNodeEnv,
+  validateJwtSecret,
+  validateJwtExpiresIn,
+  validateCorsOrigins,
+  ConfigError,
+  PLACEHOLDER_JWT_SECRET
+} from '../../src/config/env.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const backendRoot = path.resolve(__dirname, '../..');
 
 const API_BASE_URL = process.env.API_BASE_URL;
 const HEALTH_URL = process.env.HEALTH_URL;
+const JWT_SECRET = process.env.JWT_SECRET;
 
 // B5: Exigir entorno explícito provisto por el arnés; abortar antes de cualquier HTTP si falta
 if (!API_BASE_URL || !HEALTH_URL) {
@@ -45,24 +66,50 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
   // 1. Endpoints Públicos y Preflight CORS
   // -------------------------------------------------------------------------
   describe('1. Endpoints Públicos y CORS', () => {
-    it('GET /health retorna 200 con status ok y timestamp ISO', async () => {
+    it('GET /health sin Origin retorna 200 con status ok y timestamp ISO sin cabecera CORS', async () => {
       const res = await api(HEALTH_URL);
       assert.equal(res.status, 200);
       assert.equal(res.data.status, 'ok');
       assert.ok(res.data.timestamp);
       assert.ok(!isNaN(Date.parse(res.data.timestamp)));
+      assert.equal(res.headers.get('access-control-allow-origin'), null);
     });
 
-    it('GET /api/categorias retorna 200 con lista de categorías válidas', async () => {
+    it('GET /health con Origin permitido (http://localhost:5173) retorna 200, su origen y Vary: Origin', async () => {
+      const res = await fetch(HEALTH_URL, {
+        headers: { 'Origin': 'http://localhost:5173' }
+      });
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.equal(data.status, 'ok');
+      assert.equal(res.headers.get('access-control-allow-origin'), 'http://localhost:5173');
+      const vary = res.headers.get('vary') || '';
+      assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin');
+    });
+
+    it('GET /api/categorias sin Origin retorna 200 con lista de categorías válidas', async () => {
       const res = await api('/categorias');
       assert.equal(res.status, 200);
       assert.ok(Array.isArray(res.data.data));
       assert.ok(res.data.data.includes('PLOMERIA'));
       assert.ok(res.data.data.includes('ELECTRICIDAD'));
       assert.ok(res.data.data.includes('GAS'));
+      assert.equal(res.headers.get('access-control-allow-origin'), null);
     });
 
-    it('OPTIONS /api/solicitudes (CORS Preflight) responde 204 con Access-Control-Allow-Origin: *', async () => {
+    it('GET /api/categorias con segundo Origin permitido (http://127.0.0.1:5173) retorna 200, su origen y Vary: Origin', async () => {
+      const res = await fetch(`${API_BASE_URL}/categorias`, {
+        headers: { 'Origin': 'http://127.0.0.1:5173' }
+      });
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.ok(Array.isArray(data.data));
+      assert.equal(res.headers.get('access-control-allow-origin'), 'http://127.0.0.1:5173');
+      const vary = res.headers.get('vary') || '';
+      assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin');
+    });
+
+    it('OPTIONS /api/solicitudes (CORS Preflight) con Origin permitido responde 204 con métodos y headers', async () => {
       const res = await fetch(`${API_BASE_URL}/solicitudes`, {
         method: 'OPTIONS',
         signal: AbortSignal.timeout(5000),
@@ -73,7 +120,50 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
         }
       });
       assert.equal(res.status, 204);
-      assert.equal(res.headers.get('access-control-allow-origin'), '*');
+      assert.equal(res.headers.get('access-control-allow-origin'), 'http://localhost:5173');
+      const vary = res.headers.get('vary') || '';
+      assert.ok(vary.toLowerCase().includes('origin'), 'Vary debe incluir Origin');
+      const allowMethods = res.headers.get('access-control-allow-methods') || '';
+      assert.ok(allowMethods.includes('POST'));
+      assert.ok(allowMethods.includes('GET'));
+      const allowHeaders = res.headers.get('access-control-allow-headers') || '';
+      assert.ok(allowHeaders.toLowerCase().includes('authorization'));
+      assert.ok(allowHeaders.toLowerCase().includes('content-type'));
+    });
+
+    it('Petición con Origin no permitido retorna 403 con CORS_ORIGIN_DENIED y sin cabecera allow-origin', async () => {
+      const res = await fetch(`${API_BASE_URL}/categorias`, {
+        headers: { 'Origin': 'https://origen-no-autorizado.com' }
+      });
+      assert.equal(res.status, 403);
+      assert.equal(res.headers.get('access-control-allow-origin'), null);
+      const data = await res.json();
+      assert.equal(data.error.code, 'CORS_ORIGIN_DENIED');
+      assert.ok(data.error.message);
+    });
+
+    it('Preflight OPTIONS con Origin no permitido retorna 403 con CORS_ORIGIN_DENIED y sin cabecera allow-origin', async () => {
+      const res = await fetch(`${API_BASE_URL}/solicitudes`, {
+        method: 'OPTIONS',
+        headers: {
+          'Origin': 'https://origen-no-autorizado.com',
+          'Access-Control-Request-Method': 'POST'
+        }
+      });
+      assert.equal(res.status, 403);
+      assert.equal(res.headers.get('access-control-allow-origin'), null);
+      const data = await res.json();
+      assert.equal(data.error.code, 'CORS_ORIGIN_DENIED');
+    });
+
+    it('Petición con Origin "null" retorna 403 con CORS_ORIGIN_DENIED y sin cabecera allow-origin', async () => {
+      const res = await fetch(HEALTH_URL, {
+        headers: { 'Origin': 'null' }
+      });
+      assert.equal(res.status, 403);
+      assert.equal(res.headers.get('access-control-allow-origin'), null);
+      const data = await res.json();
+      assert.equal(data.error.code, 'CORS_ORIGIN_DENIED');
     });
   });
 
@@ -95,6 +185,9 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
         });
         assert.equal(res.status, 200, `Login falló para ${email}`);
         assert.ok(res.data.data.token, 'Token debe estar presente');
+        const decoded = jwt.decode(res.data.data.token);
+        assert.ok(decoded.exp && decoded.iat, 'Token debe contener claims exp e iat');
+        assert.equal(decoded.exp - decoded.iat, 604800, 'Expiración debe coincidir con JWT_EXPIRES_IN (7d = 604800s)');
         assert.equal(res.data.data.usuario.email, email);
         assert.equal(res.data.data.usuario.rol, rol);
         assert.equal(res.data.data.usuario.passwordHash, undefined, 'passwordHash nunca debe exponerse');
@@ -136,6 +229,9 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
       });
       assert.equal(res.status, 201);
       assert.ok(res.data.data.token);
+      const decoded = jwt.decode(res.data.data.token);
+      assert.ok(decoded.exp && decoded.iat);
+      assert.equal(decoded.exp - decoded.iat, 604800);
       assert.equal(res.data.data.usuario.email, email);
       assert.equal(res.data.data.usuario.rol, 'CLIENTE');
       assert.equal(res.data.data.usuario.passwordHash, undefined);
@@ -155,6 +251,9 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
       });
       assert.equal(res.status, 201);
       assert.ok(res.data.data.token);
+      const decoded = jwt.decode(res.data.data.token);
+      assert.ok(decoded.exp && decoded.iat);
+      assert.equal(decoded.exp - decoded.iat, 604800);
       assert.equal(res.data.data.usuario.email, email);
       assert.equal(res.data.data.usuario.rol, 'TECNICO');
       assert.equal(res.data.data.usuario.passwordHash, undefined);
@@ -227,6 +326,33 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
       });
       assert.equal(res.status, 401);
       assert.equal(res.data.error.code, 'UNAUTHORIZED');
+    });
+
+    it('GET /api/auth/me con token expirado retorna 401 UNAUTHORIZED (sin sleeps)', async () => {
+      const expiredToken = jwt.sign(
+        { id: 'a1111111-1111-1111-1111-111111111111', rol: 'CLIENTE' },
+        JWT_SECRET,
+        { expiresIn: '-1s' }
+      );
+      const res = await api('/auth/me', {
+        headers: { Authorization: `Bearer ${expiredToken}` }
+      });
+      assert.equal(res.status, 401);
+      assert.equal(res.data.error.code, 'UNAUTHORIZED');
+      assert.equal(res.data.error.message, 'Token expirado o inválido');
+    });
+
+    it('GET /api/auth/me con token firmado con secreto ajeno retorna 401 UNAUTHORIZED', async () => {
+      const foreignToken = jwt.sign(
+        { id: 'a1111111-1111-1111-1111-111111111111', rol: 'CLIENTE' },
+        'otro_secreto_valido_de_mas_de_32_caracteres_longitud!!'
+      );
+      const res = await api('/auth/me', {
+        headers: { Authorization: `Bearer ${foreignToken}` }
+      });
+      assert.equal(res.status, 401);
+      assert.equal(res.data.error.code, 'UNAUTHORIZED');
+      assert.equal(res.data.error.message, 'Token expirado o inválido');
     });
 
     it('GET /api/auth/me con token válido retorna el perfil sin passwordHash', async () => {
@@ -876,6 +1002,203 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
       for (const sol of res.data.data) {
         assert.equal(sol.estado, 'CANCELADA');
       }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 8. Validación de Configuración y Aborto de Startup (BE-03)
+  // -------------------------------------------------------------------------
+  describe('8. Validación de Configuración y Aborto de Startup (BE-03)', () => {
+    function runStartup(envOverrides = {}) {
+      const baseValidEnv = {
+        PATH: process.env.PATH,
+        NODE_ENV: 'test',
+        PORT: '39999',
+        DATABASE_URL: 'postgresql://testuser:testpass@localhost:5432/testdb?schema=public',
+        JWT_SECRET: 'secreto_valido_de_prueba_de_mas_de_32_caracteres_longitud',
+        JWT_EXPIRES_IN: '7d',
+        CORS_ORIGINS: 'http://localhost:5173,http://127.0.0.1:5173'
+      };
+
+      const finalEnv = { ...baseValidEnv, ...envOverrides };
+      for (const [k, v] of Object.entries(finalEnv)) {
+        if (v === undefined) {
+          delete finalEnv[k];
+        }
+      }
+
+      return spawnSync('node', ['src/index.js'], {
+        cwd: backendRoot,
+        env: finalEnv,
+        encoding: 'utf-8',
+        timeout: 8000
+      });
+    }
+
+    // 8.1 JWT_SECRET
+    it('Startup aborta con 1 si JWT_SECRET está ausente', () => {
+      const res = runStartup({ JWT_SECRET: undefined });
+      assert.equal(res.status, 1);
+      assert.ok(res.stderr.includes('JWT_SECRET'));
+    });
+
+    it('Startup aborta con 1 si JWT_SECRET usa el placeholder de ejemplo', () => {
+      const res = runStartup({ JWT_SECRET: PLACEHOLDER_JWT_SECRET });
+      assert.equal(res.status, 1);
+      assert.ok(res.stderr.includes('JWT_SECRET'));
+    });
+
+    it('Startup aborta con 1 si JWT_SECRET tiene menos de 32 caracteres y no filtra el secreto', () => {
+      const shortSecret = 'secreto_corto_12345';
+      const res = runStartup({ JWT_SECRET: shortSecret });
+      assert.equal(res.status, 1);
+      assert.ok(res.stderr.includes('JWT_SECRET'));
+      assert.equal(res.stderr.includes(shortSecret), false, 'No debe filtrar el valor del secreto');
+    });
+
+    // 8.2 DATABASE_URL
+    it('Startup aborta con 1 si DATABASE_URL está ausente', () => {
+      const res = runStartup({ DATABASE_URL: undefined });
+      assert.equal(res.status, 1);
+      assert.ok(res.stderr.includes('DATABASE_URL'));
+    });
+
+    it('Startup aborta con 1 si DATABASE_URL tiene protocolo no postgres/postgresql y no filtra credenciales', () => {
+      const invalidUrl = 'mysql://usuario:claveSecreta@localhost:3306/db';
+      const res = runStartup({ DATABASE_URL: invalidUrl });
+      assert.equal(res.status, 1);
+      assert.ok(res.stderr.includes('DATABASE_URL'));
+      assert.equal(res.stderr.includes('claveSecreta'), false, 'No debe filtrar credenciales de base');
+    });
+
+    it('Startup aborta con 1 si DATABASE_URL carece de host', () => {
+      const res = runStartup({ DATABASE_URL: 'postgresql:///solobasededatos' });
+      assert.equal(res.status, 1);
+      assert.ok(res.stderr.includes('DATABASE_URL'));
+    });
+
+    it('Startup aborta con 1 si DATABASE_URL carece de nombre de base de datos', () => {
+      const res = runStartup({ DATABASE_URL: 'postgresql://localhost/' });
+      assert.equal(res.status, 1);
+      assert.ok(res.stderr.includes('DATABASE_URL'));
+    });
+
+    // 8.3 PORT
+    it('Startup aborta con 1 si PORT es no numérico o fuera de rango', () => {
+      const resAlpha = runStartup({ PORT: 'puerto_invalido' });
+      assert.equal(resAlpha.status, 1);
+      assert.ok(resAlpha.stderr.includes('PORT'));
+
+      const resZero = runStartup({ PORT: '0' });
+      assert.equal(resZero.status, 1);
+      assert.ok(resZero.stderr.includes('PORT'));
+
+      const resHigh = runStartup({ PORT: '70000' });
+      assert.equal(resHigh.status, 1);
+      assert.ok(resHigh.stderr.includes('PORT'));
+
+      const resFloat = runStartup({ PORT: '3001.5' });
+      assert.equal(resFloat.status, 1);
+      assert.ok(resFloat.stderr.includes('PORT'));
+    });
+
+    // 8.4 JWT_EXPIRES_IN
+    it('Startup aborta con 1 si JWT_EXPIRES_IN es entero sin unidad explícita', () => {
+      const res = runStartup({ JWT_EXPIRES_IN: '3600' });
+      assert.equal(res.status, 1);
+      assert.ok(res.stderr.includes('JWT_EXPIRES_IN'));
+    });
+
+    it('Startup aborta con 1 si JWT_EXPIRES_IN tiene unidad desconocida, 0s o overflow', () => {
+      const resUnit = runStartup({ JWT_EXPIRES_IN: '10x' });
+      assert.equal(resUnit.status, 1);
+      assert.ok(resUnit.stderr.includes('JWT_EXPIRES_IN'));
+
+      const resZero = runStartup({ JWT_EXPIRES_IN: '0s' });
+      assert.equal(resZero.status, 1);
+      assert.ok(resZero.stderr.includes('JWT_EXPIRES_IN'));
+
+      const resNeg = runStartup({ JWT_EXPIRES_IN: '-5m' });
+      assert.equal(resNeg.status, 1);
+      assert.ok(resNeg.stderr.includes('JWT_EXPIRES_IN'));
+
+      const resOverflow = runStartup({ JWT_EXPIRES_IN: '9999999999999999999999999d' });
+      assert.equal(resOverflow.status, 1);
+      assert.ok(resOverflow.stderr.includes('JWT_EXPIRES_IN'));
+    });
+
+    // 8.5 NODE_ENV y CORS_ORIGINS
+    it('Startup aborta con 1 si NODE_ENV tiene valor no permitido', () => {
+      const res = runStartup({ NODE_ENV: 'staging' });
+      assert.equal(res.status, 1);
+      assert.ok(res.stderr.includes('NODE_ENV'));
+    });
+
+    it('Startup aborta con 1 en production si CORS_ORIGINS está ausente o vacío', () => {
+      const res = runStartup({ NODE_ENV: 'production', CORS_ORIGINS: undefined });
+      assert.equal(res.status, 1);
+      assert.ok(res.stderr.includes('CORS_ORIGINS'));
+
+      const resEmpty = runStartup({ NODE_ENV: 'production', CORS_ORIGINS: '   ' });
+      assert.equal(resEmpty.status, 1);
+      assert.ok(resEmpty.stderr.includes('CORS_ORIGINS'));
+    });
+
+    it('Startup aborta con 1 si CORS_ORIGINS incluye "*", "null", path o query', () => {
+      const resWildcard = runStartup({ CORS_ORIGINS: '*' });
+      assert.equal(resWildcard.status, 1);
+      assert.ok(resWildcard.stderr.includes('CORS_ORIGINS'));
+
+      const resNull = runStartup({ CORS_ORIGINS: 'null' });
+      assert.equal(resNull.status, 1);
+      assert.ok(resNull.stderr.includes('CORS_ORIGINS'));
+
+      const resPath = runStartup({ CORS_ORIGINS: 'http://localhost:5173/api' });
+      assert.equal(resPath.status, 1);
+      assert.ok(resPath.stderr.includes('CORS_ORIGINS'));
+
+      const resQuery = runStartup({ CORS_ORIGINS: 'http://localhost:5173?param=1' });
+      assert.equal(resQuery.status, 1);
+      assert.ok(resQuery.stderr.includes('CORS_ORIGINS'));
+    });
+
+    // 8.6 Validadores puros de configuración (sin sockets ni conexión a DB)
+    it('validateJwtExpiresIn calcula segundos exactos para s, m, h, d', () => {
+      assert.equal(validateJwtExpiresIn('30s').seconds, 30);
+      assert.equal(validateJwtExpiresIn('15m').seconds, 900);
+      assert.equal(validateJwtExpiresIn('2h').seconds, 7200);
+      assert.equal(validateJwtExpiresIn('7d').seconds, 604800);
+      assert.equal(validateJwtExpiresIn(undefined).seconds, 604800);
+    });
+
+    it('validateCorsOrigins normaliza orígenes y admite default en desarrollo', () => {
+      const devDefaults = validateCorsOrigins(undefined, 'development');
+      assert.deepEqual(devDefaults, ['http://localhost:5173', 'http://127.0.0.1:5173']);
+
+      const testDefaults = validateCorsOrigins('', 'test');
+      assert.deepEqual(testDefaults, ['http://localhost:5173', 'http://127.0.0.1:5173']);
+
+      const normalized = validateCorsOrigins('https://mi-dominio.com/, http://localhost:3000', 'production');
+      assert.deepEqual(normalized, ['https://mi-dominio.com', 'http://localhost:3000']);
+    });
+
+    it('getJwtConfig permite inicializar auth aislada sin requerir PORT ni DATABASE_URL', () => {
+      const validSecret = 'secreto_super_valido_de_mas_de_32_caracteres_123';
+      const jwtCfg = getJwtConfig({ JWT_SECRET: validSecret, JWT_EXPIRES_IN: '1h' });
+      assert.equal(jwtCfg.secret, validSecret);
+      assert.equal(jwtCfg.expiresIn, '1h');
+      assert.equal(jwtCfg.expiresInSeconds, 3600);
+    });
+
+    it('loadConfig recopila múltiples errores si faltan varias variables requeridas', () => {
+      assert.throws(() => {
+        loadConfig({});
+      }, (err) => {
+        assert.ok(err instanceof ConfigError);
+        assert.ok(err.message.includes('DATABASE_URL'));
+        assert.ok(err.message.includes('JWT_SECRET'));
+        return true;
+      });
     });
   });
 });

@@ -38,14 +38,27 @@ Listados paginados:
 }
 ```
 
-| HTTP | `code`              | Cuándo                                              |
-|------|---------------------|-----------------------------------------------------|
-| 400  | `VALIDATION_ERROR`  | Body o query inválidos                              |
-| 401  | `UNAUTHORIZED`      | Falta token, token inválido o credenciales erróneas |
-| 403  | `FORBIDDEN`         | El rol o usuario no tiene permiso                   |
-| 404  | `NOT_FOUND`         | El recurso no existe                                |
-| 409  | `CONFLICT`          | Email duplicado o transición de estado no permitida |
-| 500  | `INTERNAL_ERROR`    | Error inesperado                                    |
+| HTTP | `code`                 | Cuándo                                                              |
+|------|------------------------|---------------------------------------------------------------------|
+| 400  | `VALIDATION_ERROR`     | Body o query inválidos                                              |
+| 401  | `UNAUTHORIZED`         | Falta token, token inválido, token expirado o credenciales erróneas |
+| 403  | `FORBIDDEN`            | El rol o usuario no tiene permiso para la acción                    |
+| 403  | `CORS_ORIGIN_DENIED`   | Origen de la petición no permitido por la allowlist CORS            |
+| 404  | `NOT_FOUND`            | El recurso no existe                                                |
+| 409  | `CONFLICT`             | Email duplicado o transición de estado no permitida                 |
+| 500  | `INTERNAL_ERROR`       | Error inesperado                                                    |
+
+### Política CORS y Seguridad de Transporte
+
+- **Allowlist configurable:** La API restringe las peticiones cross-origin mediante la variable `CORS_ORIGINS`.
+  - En entornos locales/test, admite por defecto `http://localhost:5173` y `http://127.0.0.1:5173`.
+  - En producción, exige una lista explícita y no vacía de orígenes HTTP(S) autorizados (no se permite comodín `*` ni origen `null`).
+- **Comportamiento por origen:**
+  - **Origen permitido:** Devuelve `Access-Control-Allow-Origin: <origin>` reflejando el origen exacto y la cabecera `Vary: Origin`. Las peticiones preflight (`OPTIONS`) responden HTTP 204 No Content indicando métodos admitidos y cabeceras `Content-Type, Authorization`.
+  - **Origen denegado:** Devuelve HTTP 403 con código `CORS_ORIGIN_DENIED` en JSON y **sin** cabecera `Access-Control-Allow-Origin`.
+  - **Peticiones sin cabecera `Origin`:** (ej. curl, herramientas CLI, verificaciones `/health`, comunicación servidor a servidor) se procesan normalmente sin restricciones CORS, sujetas a la autenticación estándar.
+- **Sin credenciales de cookie:** La API no emite ni requiere cookies (`credentials`); el token viaja como Bearer en `Authorization`.
+- **Límite de seguridad:** La política CORS protege a los navegadores de peticiones cruzadas no deseadas; **CORS no sustituye la autenticación ni los permisos de roles**.
 
 ## 2. Enums
 

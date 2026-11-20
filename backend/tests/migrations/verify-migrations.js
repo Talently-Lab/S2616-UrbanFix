@@ -291,7 +291,10 @@ async function main() {
         process.exit(1);
       });
     `;
-    await runCommand(`node -e "${loginCheckScript.replace(/"/g, '\\"')}"`, { DATABASE_URL: urlF0 });
+    await runCommand(`node -e "${loginCheckScript.replace(/"/g, '\\"')}"`, {
+      DATABASE_URL: urlF0,
+      JWT_SECRET: 'test_migrations_runner_jwt_secret_valid_32_chars'
+    });
     console.log('✔ F0 superado exitosamente.\n');
 
     // -----------------------------------------------------------------
