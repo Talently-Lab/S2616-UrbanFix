@@ -1,51 +1,53 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   setupTestDatabase,
+  ensurePrismaClient,
   applyMigrations,
   applySeed,
   startApiServer,
   teardownTestEnvironment,
-  backendRoot,
-  maskUrl
+  killAllChildProcesses,
+  activeResources,
+  backendRoot
 } from './harness.js';
 
-let env = null;
-let testChildProcess = null;
-let isShuttingDown = false;
 let teardownPromise = null;
 
-async function performTeardown() {
+async function performUnifiedTeardown() {
   if (teardownPromise) return teardownPromise;
   teardownPromise = (async () => {
-    isShuttingDown = true;
-    if (testChildProcess && !testChildProcess.killed) {
-      try { testChildProcess.kill('SIGTERM'); } catch (_) {}
+    try {
+      await teardownTestEnvironment();
+    } catch (cleanupErr) {
+      return cleanupErr;
     }
-    if (env) {
-      await teardownTestEnvironment(env);
-      env = null;
-    }
+    return null;
   })();
   return teardownPromise;
 }
 
-async function handleSignal(sig) {
-  if (isShuttingDown) return;
-  isShuttingDown = true;
-  console.log(`\n[Runner ${sig}] Interrupción recibida. Cancelando ejecución y limpiando recursos...`);
-  await performTeardown();
-  process.exit(sig === 'SIGINT' ? 130 : 143);
+function handleSignal(sig) {
+  if (activeResources.isShuttingDown) return;
+  activeResources.isShuttingDown = true;
+  activeResources.shutdownSignal = sig;
+  console.log(`\n[Runner ${sig}] Señal de interrupción recibida. Cancelando operaciones en curso y procediendo a teardown unificado...`);
+  // Notificar a todos los procesos hijos activos para desbloquear awaits de inmediato
+  killAllChildProcesses(sig);
 }
 
 process.on('SIGINT', () => { handleSignal('SIGINT'); });
 process.on('SIGTERM', () => { handleSignal('SIGTERM'); });
 
 async function runTests(apiBaseUrl, healthUrl, testDbUrl, jwtSecret) {
+  if (activeResources.isShuttingDown) {
+    throw new Error(`Ejecución de tests abortada por señal (${activeResources.shutdownSignal})`);
+  }
+
   const testArgs = process.argv.slice(2);
   const targetFiles = testArgs.length > 0 ? testArgs : ['tests/api/api.test.js'];
   console.log(`\n[Runner Tests] Iniciando ejecución de tests de integración (${targetFiles.join(', ')}) con node:test...\n`);
+
   return new Promise((resolve) => {
     const child = spawn('node', ['--test', ...targetFiles], {
       cwd: backendRoot,
@@ -56,20 +58,33 @@ async function runTests(apiBaseUrl, healthUrl, testDbUrl, jwtSecret) {
         DATABASE_URL: testDbUrl,
         JWT_SECRET: jwtSecret
       },
+      detached: true,
       stdio: 'inherit'
     });
-    testChildProcess = child;
 
-    child.on('close', (code) => {
-      testChildProcess = null;
+    activeResources.activeChildProcesses.add(child);
+
+    child.on('close', (code, signal) => {
+      activeResources.activeChildProcesses.delete(child);
+      if (activeResources.isShuttingDown) {
+        resolve(activeResources.shutdownSignal === 'SIGINT' ? 130 : 143);
+        return;
+      }
       resolve(code ?? 1);
     });
+
     child.on('error', (err) => {
       console.error('[Runner Tests] Error ejecutando tests:', err);
-      testChildProcess = null;
+      activeResources.activeChildProcesses.delete(child);
       resolve(1);
     });
   });
+}
+
+function checkNotAborted() {
+  if (activeResources.isShuttingDown) {
+    throw new Error(`Operación abortada por señal (${activeResources.shutdownSignal})`);
+  }
 }
 
 async function main() {
@@ -78,21 +93,29 @@ async function main() {
   console.log('================================================================\n');
 
   let testExitCode = 1;
+  let executionError = null;
 
   try {
     // 1. Configuración de Base de Datos aislada (Docker efímero o TEST_DATABASE_URL)
+    // Se registra inmediatamente la propiedad de cada recurso adquirido
     const db = await setupTestDatabase();
-    env = { db, apiServer: null };
+    checkNotAborted();
+
+    // B1: Generar Prisma Client en el entorno de laboratorio (soporta arranque limpio tras npm ci)
+    await ensurePrismaClient(db.testDbUrl);
+    checkNotAborted();
 
     // 2. Aplicar migraciones canónicas reparadas (NUNCA db push)
     await applyMigrations(db.testDbUrl);
+    checkNotAborted();
 
     // 3. Sembrar datos explícitos de demostración/laboratorio
     await applySeed(db.testDbUrl);
+    checkNotAborted();
 
     // 4. Iniciar API Express en puerto efímero con secreto JWT propio
     const apiServer = await startApiServer(db.testDbUrl);
-    env.apiServer = apiServer;
+    checkNotAborted();
 
     // 5. Ejecutar la suite HTTP con node:test y fetch nativos
     testExitCode = await runTests(apiServer.apiBaseUrl, apiServer.healthUrl, db.testDbUrl, apiServer.jwtSecret);
@@ -103,11 +126,28 @@ async function main() {
       console.error(`\n❌ LA SUITE DE INTEGRACIÓN REPORTÓ FALLOS (Exit code: ${testExitCode}).`);
     }
   } catch (err) {
-    console.error('\n❌ ERROR EN EL ARRANQUE DEL RUNNER DE PRUEBAS:');
-    console.error(err.message || err);
+    executionError = err;
+    if (!activeResources.isShuttingDown) {
+      console.error('\n❌ ERROR EN EL ARRANQUE DEL RUNNER DE PRUEBAS:');
+      console.error(err.message || err);
+    }
     testExitCode = 1;
   } finally {
-    await performTeardown();
+    // Teardown unificado que garantiza drenar todos los recursos activos
+    const cleanupError = await performUnifiedTeardown();
+
+    // Si se recibió señal SIGINT/SIGTERM, salir con código estándar
+    if (activeResources.shutdownSignal) {
+      const code = activeResources.shutdownSignal === 'SIGINT' ? 130 : 143;
+      console.log(`[Runner] Saliendo con código ${code} por interrupción ${activeResources.shutdownSignal}.`);
+      process.exit(code);
+    }
+
+    // B4: Si la limpieza tuvo fallos, la salida DEBE ser no-cero
+    if (cleanupError) {
+      console.error('\n❌ ERROR: Ocurrieron fallos durante la limpieza de recursos:', cleanupError.message);
+      process.exit(1);
+    }
   }
 
   process.exit(testExitCode);
@@ -116,6 +156,6 @@ async function main() {
 main().catch(async (fatal) => {
   console.error('\n❌ ERROR FATAL INESPERADO:');
   console.error(fatal);
-  await performTeardown();
+  await performUnifiedTeardown();
   process.exit(1);
 });

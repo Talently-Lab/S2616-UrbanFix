@@ -1,10 +1,19 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-const API_BASE_URL = process.env.API_BASE_URL || 'http://127.0.0.1:3001/api';
-const HEALTH_URL = process.env.HEALTH_URL || 'http://127.0.0.1:3001/health';
+const API_BASE_URL = process.env.API_BASE_URL;
+const HEALTH_URL = process.env.HEALTH_URL;
 
-// Helper HTTP
+// B5: Exigir entorno explícito provisto por el arnés; abortar antes de cualquier HTTP si falta
+if (!API_BASE_URL || !HEALTH_URL) {
+  console.error('\n❌ ERROR DE SEGURIDAD EN SUITE DE PRUEBAS:');
+  console.error('Las variables de entorno API_BASE_URL y HEALTH_URL deben estar explícitamente configuradas por el arnés de pruebas.');
+  console.error('Para evitar modificar datos de un entorno de desarrollo local (localhost:3001),');
+  console.error('la suite prohíbe fallbacks predeterminados. Ejecute las pruebas mediante "npm test".\n');
+  process.exit(1);
+}
+
+// Helper HTTP con límites de tiempo acotados (B6)
 async function api(path, options = {}) {
   const url = path.startsWith('http') ? path : `${API_BASE_URL}${path}`;
   const headers = {
@@ -14,6 +23,7 @@ async function api(path, options = {}) {
   const res = await fetch(url, {
     ...options,
     headers,
+    signal: options.signal || AbortSignal.timeout(5000),
     body: options.body && typeof options.body === 'object' ? JSON.stringify(options.body) : options.body
   });
   let data;
@@ -55,6 +65,7 @@ describe('UrbanFix Backend - Suite de Integración de API (BE-02)', () => {
     it('OPTIONS /api/solicitudes (CORS Preflight) responde 204 con Access-Control-Allow-Origin: *', async () => {
       const res = await fetch(`${API_BASE_URL}/solicitudes`, {
         method: 'OPTIONS',
+        signal: AbortSignal.timeout(5000),
         headers: {
           'Origin': 'http://localhost:5173',
           'Access-Control-Request-Method': 'POST',

@@ -108,10 +108,14 @@ async function onSignal(sig) {
   isShuttingDown = true;
   terminationSignal = sig;
   console.log(`\n[${sig} recibido] Cancelando ejecución y limpiando recursos propios inmediatamente...`);
-  if (activeChild) {
+  if (activeChild && activeChild.pid) {
     try {
-      activeChild.kill(sig);
-    } catch (_) {}
+      process.kill(-activeChild.pid, sig);
+    } catch (e) {
+      if (e.code !== 'ESRCH') {
+        try { activeChild.kill(sig); } catch (_) {}
+      }
+    }
   }
   await cleanupCreatedDatabases();
   process.exit(sig === 'SIGINT' ? 130 : 143);
@@ -122,8 +126,8 @@ process.on('SIGTERM', () => { onSignal('SIGTERM'); });
 
 /**
  * Crea una base de datos con nombre impredecible sin borrar previamente bases ajenas.
- * Registra el nombre creado únicamente tras el CREATE DATABASE exitoso.
- * Aborta inmediatamente si se ha recibido señal de interrupción.
+ * Registra el nombre anticipadamente para que ante interrupción durante CREATE DATABASE
+ * el teardown ejecute DROP DATABASE IF EXISTS y no queden bases huérfanas en vuelo.
  */
 async function createIsolatedTestDatabase(label) {
   if (isShuttingDown) {
@@ -131,11 +135,19 @@ async function createIsolatedTestDatabase(label) {
   }
   const runId = crypto.randomUUID().replace(/-/g, '').slice(0, 10);
   const dbName = `uf_${label}_${runId}`;
-  if (isShuttingDown) {
-    throw new Error(`Operación abortada por señal de interrupción (${terminationSignal}). No se crearán nuevas bases.`);
-  }
-  await executeAdminQuery(`CREATE DATABASE ${dbName};`);
+  
+  // Registro anticipado para cubrir ventana de operación en vuelo
   createdDatabases.add(dbName);
+  try {
+    await executeAdminQuery(`CREATE DATABASE ${dbName};`);
+  } catch (err) {
+    if (!isShuttingDown) {
+      try { await executeAdminQuery(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE);`); } catch (_) {}
+      createdDatabases.delete(dbName);
+    }
+    throw err;
+  }
+
   return {
     dbName,
     url: getDatabaseUrl(BASE_DATABASE_URL, dbName)
@@ -150,6 +162,7 @@ function runCommand(command, envOverrides = {}) {
     const child = spawn('sh', ['-c', command], {
       cwd: backendRoot,
       env: { ...process.env, ...envOverrides },
+      detached: true, // Process group para terminar árboles de procesos completos
       stdio: ['ignore', 'pipe', 'pipe']
     });
     activeChild = child;
