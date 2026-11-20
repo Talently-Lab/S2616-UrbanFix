@@ -3,129 +3,183 @@
 ## 1. Contexto y Diagnóstico Arquitectónico
 
 ### 1.1 El Problema (Defectos D2 y D3)
-En las revisiones previas del proyecto, la ejecución de `npx prisma migrate deploy` sobre una base de datos PostgreSQL vacía fallaba con el siguiente error:
+En las revisiones previas del proyecto, la ejecución de `npx prisma migrate deploy` sobre una base de datos PostgreSQL vacía fallaba con:
 - **Error:** `P3018 / SQLSTATE 42710: ERROR: type "Rol" already exists` en la migración `20261005143951_init`.
-- **Efecto colateral:** Al reintentar, Prisma detectaba una migración fallida en `_prisma_migrations` bloqueando la base con `P3009` (Defecto D2).
+- **Efecto de bloqueo:** Al reintentar, Prisma detectaba una migración fallida en `_prisma_migrations`, arrojando `P3009` (Defecto D2).
+
+Adicionalmente, si una base creada con la migración de semana 3 contenía datos de solicitudes, ejecutar `prisma migrate deploy` directamente fallaba con `SQLSTATE 23502` (`column "categoria" contains null values`) debido a que la migración intermedia aplicaba `DROP COLUMN "categoria", ADD COLUMN "categoria" TEXT NOT NULL`, destruyendo irrevocablemente las categorías preexistentes (Defecto D3).
 
 ### 1.2 Causa Raíz
 Al auditar el historial de Git (`git log backend/prisma/migrations` y `git show a1ec432`):
-- En el hito de la semana 3 (`fac9ce7`), la migración inicial canónica fue `20261007000000_init`.
-- Posteriormente, en la semana 4 (commit `a1ec432`), se introdujeron inadvertidamente dos carpetas de migraciones previas procedentes de un entorno local (`20261002224650_init` y `20261005143951_init`).
-- Ambas migraciones duplicaban la creación de los tipos enums (`Rol`, `EstadoSolicitud`) y las tablas (`Usuario`, `SolicitudServicio`). Debido a que Prisma ordena las migraciones por su marca temporal lexicográfica, ejecutaba `20261002224650_init` y luego fallaba inmediatamente al intentar crear nuevamente el tipo `Rol` en `20261005143951_init`.
+- En el entregable de la semana 3 (`fac9ce7`), la migración inicial canónica fue `20261007000000_init`.
+- Posteriormente, en la semana 4 (commit `a1ec432`), se añadieron inadvertidamente dos carpetas de migraciones locales obsoletas (`20261002224650_init` y `20261005143951_init`).
+- Ambas migraciones duplicaban la creación de enums (`Rol`, `EstadoSolicitud`) y tablas (`Usuario`, `SolicitudServicio`). Prisma, al ordenar lexicográficamente las carpetas, ejecutaba `20261002224650_init` y fallaba de inmediato al intentar recrear `Rol` en `20261005143951_init`.
 
 ### 1.3 Secuencia Canónica Aprobada
 Con la autorización explícita de arquitectura (Codex), se eliminaron del árbol activo exclusivamente las dos carpetas duplicadas espurias:
 - `backend/prisma/migrations/20261002224650_init/` (eliminada)
 - `backend/prisma/migrations/20261005143951_init/` (eliminada)
 
-La secuencia canónica de migraciones resultante conservada **byte a byte** (con checksums SHA-256 intactos) es:
+La secuencia canónica de migraciones resultante se conserva **byte a byte** (con checksums SHA-256 intactos):
 1. `20261007000000_init`: Creación inicial canónica de schema `public`, tipos `Rol`, `CategoriaServicio`, `EstadoSolicitud`, tablas `Usuario`, `SolicitudServicio` (con categoría enum), `HistorialEstadoSolicitud`, e índices.
 2. `20261011212651_add_last_login_to_usuario`: Agrega `lastLogin TIMESTAMP(3)` a `Usuario` y convierte `SolicitudServicio.categoria` a `TEXT NOT NULL`.
 3. `20261011230000_feat_rechazo_vuelve_a_pendiente`: Agrega columna `accion TEXT` a `HistorialEstadoSolicitud` y crea la tabla `RechazoSolicitud` con sus índices y claves foráneas.
 
 ---
 
-## 2. Matriz de Estados de Base de Datos (Fixtures F0 a F5)
+## 2. Herramienta de Pre-check de Estado de Base de Datos
 
-Para garantizar un ciclo de vida predecible y seguro, se definen los siguientes estados soportados y no soportados:
+Para evitar mutaciones ciegas, drift o corrupción, se incluye la utilidad read-only `migration-precheck.js`.
 
-| Fixture | Estado | Soporte | Procedimiento Requerido |
-|---|---|---|---|
-| **F0** | PostgreSQL Vacío | Soportado | `npx prisma migrate deploy` directo |
-| **F1** | Base canónica al día | Soportado | `npx prisma migrate deploy` no-op idempotente |
-| **F2** | Base canónica inicial con datos (Semana 3) | Soportado (procedimiento conservador) | Conversión no destructiva de categoría + `migrate resolve` + `migrate deploy` |
-| **F3** | Base con ledger fallido (P3009) | No soportado directamente (Bloqueado) | Diagnóstico asistido, rollback controlado con resolve o recreación en dev |
-| **F4** | Base generada con `prisma db push` sin ledger | Soportado | Validación previa con `migrate diff` + baselining ordenado vía `resolve --applied` |
-| **F5** | Base con init legacy aplicada (`20261002...` o `20261005...`) | **No soportado / Bloqueado** | Detección previa y abort; requiere recreación limpia en desarrollo o intervención experta con backup |
+### 2.1 Ejecución
+```bash
+# Utilizando la variable DATABASE_URL del entorno:
+npm run db:precheck
+
+# O especificando una URL explícita:
+node tests/migrations/migration-precheck.js --url "postgresql://usuario:pass@localhost:5432/mi_base"
+```
+
+### 2.2 Códigos de Salida y Criterios
+- **Exit 0 (Soportado):** La base se encuentra en un estado canónico reconocido (`CLEAN_DATABASE`, `CANONICAL_INITIAL_NEEDS_UPGRADE`, `CANONICAL_FULLY_UPDATED`).
+- **Exit 1 (Bloqueado):** Se detectan migraciones legacy espurias (`LEGACY_UNSUPPORTED`), migraciones fallidas (`FAILED_MIGRATION_PENDING`), tablas sin ledger (`DB_PUSH_OR_UNTRACKED_OBJECTS`), migraciones desconocidas (`UNKNOWN_MIGRATIONS_IN_LEDGER`), o discrepancias de checksums contra los archivos en disco (`CHECKSUM_MISMATCH`). **No mutar la base si el precheck sale con error 1.**
 
 ---
 
-## 3. Procedimientos Operativos Detallados
+## 3. Matriz de Estados de Base de Datos (Fixtures F0 a F9)
 
-### 3.1 Escenario F0: Instalación Vacía (Nuevos Entornos, CI, Docker)
-En cualquier base nueva y limpia:
+| Fixture | Estado | Pre-check Status | Soporte | Procedimiento Operativo |
+|---|---|---|---|---|
+| **F0** | PostgreSQL Vacío | `CLEAN_DATABASE` | Soportado | `prisma migrate deploy` directo |
+| **F1** | Base canónica al día | `CANONICAL_FULLY_UPDATED` | Soportado | `prisma migrate deploy` no-op idempotente |
+| **F2** | Base canónica inicial con datos (Semana 3) | `CANONICAL_INITIAL_NEEDS_UPGRADE` | Soportado (procedimiento conservador) | Transacción SQL no destructiva + pre-verificación de esquema + `resolve` + `deploy` |
+| **F3** | Base con ledger fallido (P3009) | `FAILED_MIGRATION_PENDING` | **Bloqueado** | Diagnóstico asistido, rollback o recreación en desarrollo |
+| **F4** | Base con `prisma db push` sin ledger | `DB_PUSH_OR_UNTRACKED_OBJECTS` | Soportado tras diff | Validación estricta con `migrate diff` + baselining ordenado vía `resolve --applied` |
+| **F5** | Base con init legacy duplicada (`20261002...` o `20261005...`) | `LEGACY_UNSUPPORTED` | **Bloqueado** | Abort antes de mutar; recreación limpia en desarrollo o migración forense con backup |
+| **F6** | Migraciones desconocidas en ledger | `UNKNOWN_MIGRATIONS_IN_LEDGER` | **Bloqueado** | Abort antes de mutar; investigar origen de migraciones ajenas |
+| **F7** | Checksum alterado contra disco | `CHECKSUM_MISMATCH` | **Bloqueado** | Abort; indica archivos modificados tras ser aplicados |
+| **F8** | Migración con rollback registrado | `ROLLED_BACK_MIGRATIONS_IN_LEDGER` | **Bloqueado** | Abort; requiere revisión manual de estado |
+| **F9** | Base con enums/objetos sin ledger | `DB_PUSH_OR_UNTRACKED_OBJECTS` | **Bloqueado** | No se clasifica como vacía; requiere inspección de diff |
+
+---
+
+## 4. Procedimientos Operativos Detallados
+
+> [!IMPORTANT]
+> Ejecutar **siempre** `npm run db:precheck` antes de cualquier intervención.
+
+### 4.1 Escenario F0: Instalación Vacía (Nuevos Entornos, CI, Docker)
+Apto para bases recién creadas sin tablas ni tipos:
 ```bash
-# 1. Aplicar migraciones
+# 1. Comprobar que la base está vacía (debe reportar CLEAN_DATABASE con exit 0)
+npm run db:precheck
+
+# 2. Aplicar migraciones
 npx prisma migrate deploy
 
-# 2. Verificar idempotencia (debe informar "No pending migrations to apply")
+# 3. Verificar idempotencia (debe informar "No pending migrations to apply")
 npx prisma migrate deploy
 
-# 3. Verificar drift contra el schema (debe salir con código 0 y sin diferencias)
+# 4. Verificar drift contra el schema (debe salir con código 0 y sin diferencias)
 npx prisma migrate diff --from-schema prisma/schema.prisma --to-config-datasource --exit-code
 
-# 4. Poblar datos de prueba (idempotente)
+# 5. Poblar datos de prueba (idempotente)
 npm run seed
 ```
 
-### 3.2 Escenario F1: Base Canónica ya Actualizada
+### 4.2 Escenario F1: Base Canónica ya Actualizada
 Bases de staging o producción que ya han corrido las 3 migraciones canónicas:
 ```bash
-# Debe reportar 0 migraciones pendientes y conservar datos sin mutaciones
+# 1. Verificar estado al día (debe reportar CANONICAL_FULLY_UPDATED con exit 0)
+npm run db:precheck
+
+# 2. Comprobar que no hay pendientes ni mutaciones
 npx prisma migrate deploy
 ```
 
-### 3.3 Escenario F2: Base Canónica Inicial con Datos Preexistentes (Semana 3)
+### 4.3 Escenario F2: Base Canónica Inicial con Datos Preexistentes (Semana 3)
 > [!WARNING]
-> **Riesgo crítico de pérdida de datos (Defecto D3):**
-> La migración generada por Prisma `20261011212651_add_last_login_to_usuario` contiene:
-> ```sql
-> ALTER TABLE "SolicitudServicio" DROP COLUMN "categoria", ADD COLUMN "categoria" TEXT NOT NULL;
-> ```
-> Si se ejecuta `prisma migrate deploy` directamente sobre una base con solicitudes existentes:
-> 1. PostgreSQL fallará con `ERROR: column "categoria" contains null values` (código 23502) porque no hay default.
-> 2. Incluso si no fuera `NOT NULL`, se eliminarían y perderían irrevocablemente todas las categorías existentes de las solicitudes.
+> **Límite crítico sobre el Defecto D3:**
+> **NO** declarar resuelto el defecto D3 para un `prisma migrate deploy` directo sobre una base inicial poblada. Ejecutar `migrate deploy` directamente sobre una base con solicitudes existentes **fallará con SQLSTATE 23502** y destruiría los datos de categorías.
+> D3 se resuelve **únicamente** siguiendo el procedimiento conservador transaccional previo que se detalla a continuación.
 
 #### Procedimiento Conservador Obligatorio:
-1. **Generar Backup:**
+1. **Verificar estado con pre-check:**
+   ```bash
+   npm run db:precheck
+   # Debe responder CANONICAL_INITIAL_NEEDS_UPGRADE con exit 0.
+   ```
+2. **Generar Backup obligatorio:**
    ```bash
    pg_dump -U <usuario> -d <nombre_db> -Fc > backup_pre_upgrade.dump
    ```
-2. **Ejecutar conversión SQL segura sin pérdida:**
+3. **Auditar snapshot de datos antes de la migración:**
+   Verificar cantidad y contenido de usuarios, solicitudes y categorías existentes.
+4. **Ejecutar la conversión SQL en una transacción atómica:**
    ```sql
-   -- Convertir tipo de dato sin destruir la columna ni sus valores
+   BEGIN;
+   -- Convierte la columna categoria de enum a TEXT preservando los valores existentes
    ALTER TABLE "SolicitudServicio" ALTER COLUMN "categoria" TYPE TEXT USING "categoria"::text;
-   -- Asegurar campo lastLogin en Usuario
+   -- Agrega lastLogin opcional en Usuario
    ALTER TABLE "Usuario" ADD COLUMN IF NOT EXISTS "lastLogin" TIMESTAMP(3);
+   COMMIT;
    ```
-3. **Marcar la migración intermedia como aplicada sin reejecutar su SQL destructivo:**
+5. **Verificar los efectos en el esquema físico ANTES de resolve:**
+   ```sql
+   SELECT column_name, data_type 
+   FROM information_schema.columns 
+   WHERE table_schema = 'public' 
+   AND table_name = 'SolicitudServicio' AND column_name = 'categoria';
+   -- data_type debe ser 'text'
+   ```
+6. **Registrar la migración intermedia como aplicada:**
    ```bash
    npx prisma migrate resolve --applied 20261011212651_add_last_login_to_usuario
    ```
-4. **Desplegar la migración final de rechazos:**
+7. **Desplegar la migración final de rechazos:**
    ```bash
    npx prisma migrate deploy
    ```
-5. **Verificar concordancia del modelo y conservación de datos:**
+8. **Verificar concordancia del modelo final:**
    ```bash
    npx prisma migrate diff --from-schema prisma/schema.prisma --to-config-datasource --exit-code
+   # Debe indicar: "No difference detected."
    ```
+9. **Auditar snapshot posterior:**
+   Comprobar que todos los IDs, correos, roles, títulos, estados, categorías e historiales se conservaron íntegramente.
 
-### 3.4 Escenario F4: Base Sincronizada con `prisma db push` (Sin `_prisma_migrations`)
+### 4.4 Escenario F4: Base Sincronizada con `prisma db push` (Sin `_prisma_migrations`)
 Para alinear una base donde se utilizó `db push` para crear las tablas:
 > [!CAUTION]
 > No aplicar `prisma migrate resolve` a ciegas. Debe verificarse previamente que el esquema físico coincida al 100% con el modelo de datos.
 
-1. **Verificar diff estricto:**
+1. **Pre-check:**
+   ```bash
+   npm run db:precheck
+   # Informará DB_PUSH_OR_UNTRACKED_OBJECTS.
+   ```
+2. **Verificar diff estricto contra el modelo:**
    ```bash
    npx prisma migrate diff --from-schema prisma/schema.prisma --to-config-datasource --exit-code
-   # Solo si el exit code es 0 ("No difference detected"), proceder al baselining.
+   # Si arroja cualquier diferencia (exit code != 0), ABORTAR. No hacer baselining con drift.
    ```
-2. **Registrar secuencialmente las migraciones canónicas:**
+3. **Registrar secuencialmente las 3 migraciones canónicas:**
    ```bash
    npx prisma migrate resolve --applied 20261007000000_init
    npx prisma migrate resolve --applied 20261011212651_add_last_login_to_usuario
    npx prisma migrate resolve --applied 20261011230000_feat_rechazo_vuelve_a_pendiente
    ```
-3. **Comprobar estado final:**
+4. **Comprobar estado final:**
    ```bash
+   npm run db:precheck
+   # Debe indicar CANONICAL_FULLY_UPDATED (exit 0).
    npx prisma migrate deploy
    # Debe indicar: "No pending migrations to apply."
    ```
 
-### 3.5 Escenario F5: Detección y Abort ante Migraciones Legacy o Corruptas
+### 4.5 Escenario F5: Detección y Abort ante Migraciones Legacy o Corruptas
 Si una base contiene registros correspondientes a las migraciones espurias eliminadas (`20261002224650_init` o `20261005143951_init`):
-- **Diagnóstico:** La herramienta `migration-precheck.js` inspecciona `_prisma_migrations` y, ante la presencia de prefijos `20261002` o `20261005`, devuelve `supported: false` y `status: 'LEGACY_UNSUPPORTED'`.
+- `npm run db:precheck` arrojará `LEGACY_UNSUPPORTED` con exit 1.
 - **Regla:** **Abortar inmediatamente antes de mutar o aplicar comandos de resolución.**
 - **Recuperación:**
   - En bases de producción o staging: Escalar al arquitecto; no realizar mutaciones manuales sobre metadatos de Prisma sin auditoría forense.
@@ -133,13 +187,23 @@ Si una base contiene registros correspondientes a las migraciones espurias elimi
 
 ---
 
-## 4. Verificación Automatizada y Regresión
+## 5. Verificación Automatizada y Regresión
 
-El proyecto incluye una suite automatizada en `backend/tests/migrations/verify-migrations.js` que reproduce y valida exhaustivamente los escenarios F0 a F5 en un entorno PostgreSQL aislado.
+El proyecto incluye una suite automatizada en `backend/tests/migrations/verify-migrations.js` que reproduce y valida exhaustivamente los escenarios F0 a F9.
 
-### Ejecución:
+### 5.1 Requisitos de Laboratorio
+- Instancia de PostgreSQL (versión 16 recomendada).
+- Privilegio `CREATEDB` en el usuario de PostgreSQL para permitir la creación de bases efímeras con nombres impredecibles.
+- **Variable obligatoria:** `TEST_DATABASE_URL` (sin fallback a `DATABASE_URL` para garantizar que nunca se toque una base productiva o ajena).
+
+Ejemplo para iniciar un PostgreSQL de laboratorio en Docker en un puerto libre:
 ```bash
-npm run test:migrations
+docker run -d --name uf-lab-postgres -p 55432:5432 -e POSTGRES_PASSWORD=testpass postgres:16-alpine
 ```
-Variables de entorno opcionales:
-- `TEST_DATABASE_URL`: Cadena de conexión al servidor PostgreSQL de pruebas (por defecto conecta a la instancia aislada local).
+
+### 5.2 Ejecución de la Suite
+```bash
+TEST_DATABASE_URL="postgresql://postgres:testpass@localhost:55432/postgres" npm run test:migrations
+```
+
+El runner crea bases con nombres aleatorios (`uf_<label>_<uuid>`), nunca borra bases previas ajenas, y garantiza la limpieza de todas sus bases temporales creadas en un bloque `finally`, incluso ante fallos de aserción.

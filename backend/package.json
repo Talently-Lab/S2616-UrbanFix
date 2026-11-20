@@ -11,6 +11,7 @@
     "dev": "nodemon src/index.js",
     "test": "bash ../scripts/test-api.sh",
     "test:migrations": "node tests/migrations/verify-migrations.js",
+    "db:precheck": "node tests/migrations/migration-precheck.js",
     "seed": "prisma db seed",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "prisma db seed",
