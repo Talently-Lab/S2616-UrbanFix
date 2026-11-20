@@ -16,7 +16,7 @@ Antigravity. QA independiente: Devin. Arquitectura y coordinación: Codex.
 | BE-04 | [#12 Carreras y transiciones](https://github.com/Talently-Lab/S2616-UrbanFix/issues/12) | P1 | BE-01, BE-02 | Integrada localmente; QA aprobado en 4a1afab, 71 tests; sin aprobación de push |
 | BE-05 | [#13 Contrato y documentación](https://github.com/Talently-Lab/S2616-UrbanFix/issues/13) | P1 | BE-01, BE-02, BE-03, BE-04, BE-06 | Siguiente: consolidar contrato completo y docs; corregir E1/E2 del QA de BE-06 |
 | BE-06 | [#14 Docker y preparación de despliegue](https://github.com/Talently-Lab/S2616-UrbanFix/issues/14) | P1 | BE-01, BE-03 | Implementada localmente; Dockerfile Node 24 slim no-root sin auto-migrate/seed, compose.yaml, GET /ready y timeouts <=5s, 78 tests; pendiente validación QA Devin |
-| BE-07 | [#15 Publicación y verificación pública](https://github.com/Talently-Lab/S2616-UrbanFix/issues/15) | P1 | BE-01 a BE-06, QA aprobado | Bloqueada hasta definir infraestructura y autorizar publicación concreta |
+| BE-07 | [#15 Publicación y verificación pública](https://github.com/Talently-Lab/S2616-UrbanFix/issues/15) | P1 | BE-01 a BE-06, QA aprobado | Excluida por instrucción explícita del usuario; no ejecutar ni pedir infraestructura |
 
 ## Secuencia
 
@@ -28,8 +28,8 @@ Antigravity. QA independiente: Devin. Arquitectura y coordinación: Codex.
 3. Antigravity implementa BE-02 y BE-03, seguido de BE-04 y BE-06; Devin valida
    cada entrega. El arquitecto puede reasignar lotes sin solapar escritura.
 4. Consolidar BE-05 y verificar documentación contra comandos reales.
-5. Presentar artefacto y plan de BE-07. Solicitar solo los datos y autorizaciones
-   que falten para el proveedor, la base, el origen de frontend y la publicación.
+5. BE-07 / #15 queda excluida por instrucción explícita del usuario. No publicar
+   ni solicitar información de hosting; finalizar el ciclo con las entregas locales.
 
 Los despachos de Orca son la fuente de verdad del trabajo en ejecución. Una
 issue permanece abierta hasta cumplir sus criterios y la revisión de QA.
@@ -127,3 +127,10 @@ con caracteres reservados y rollback. La pausa de PostgreSQL dio respuestas
 Los timeouts son de 4s por fase; la precisión del wording y la diferencia entre
 comillas en Compose y Docker CLI se consolidan en BE-05. No hay despliegue
 público ni autorización de nuevo push.
+
+## Exclusión de BE-07 por el usuario
+
+El usuario indicó «no hagas la 15». No se ejecutará la publicación pública ni
+se investigará/aprovisionará hosting para ella. La consulta previa sobre
+proveedor y origen público del frontend queda sin efecto. BE-05/#13 sigue
+autorizada para consolidar la documentación; no se inventará una URL de demo.

@@ -8,6 +8,11 @@ repositorio para comprobar compatibilidad, pero está prohibido modificar
 y dependencias. Los tests y reportes de QA se guardan en `backend/tests/`
 y `backend/docs/qa/`.
 
+La issue **#15 (BE-07, publicación pública)** está excluida de este ciclo por
+instrucción explícita del usuario. No ejecutarla, aprovisionar infraestructura
+ni solicitar datos de hosting para ella. La preparación local de Docker y la
+documentación de #13/#14 siguen autorizadas.
+
 Los cambios de implementación se limitan a `backend/`. El arquitecto mantiene
 este archivo y puede actualizar la sección backend de `README.md` y crear
 workflows en `.github/workflows/` limitados al backend cuando una issue lo

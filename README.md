@@ -279,9 +279,9 @@ El registro público crea clientes o técnicos; no crea administradores.
 
 ### Demo e integración
 
-**No hay una URL de demo pública verificada.** La publicación de la API se
-gestiona en la [issue #15](https://github.com/Talently-Lab/S2616-UrbanFix/issues/15).
-Cuando exista un despliegue comprobado se agregará su URL y versión aquí.
+**No hay una URL de demo pública verificada.** La
+[issue #15](https://github.com/Talently-Lab/S2616-UrbanFix/issues/15) está excluida
+de este ciclo por instrucción del usuario; este trabajo no publica la API.
 
 El backend devuelve el estado actual y los datos del técnico mediante consultas
 autenticadas de solicitudes. La actualización automática de una pantalla depende
