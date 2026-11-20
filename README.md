@@ -216,42 +216,41 @@ migraciones, seed explícito y arranque con `npm run dev` desde `backend/`.
 - Contrato de rutas, cuerpos y permisos: [API_CONTRACT.md](./backend/docs/API_CONTRACT.md).
 - Plan de correcciones y dependencias: [BACKEND_PLAN.md](./backend/docs/BACKEND_PLAN.md).
 
-**Estado de las migraciones:** la reparación de la
-[issue #9](https://github.com/Talently-Lab/S2616-UrbanFix/issues/9) está integrada
-en la rama de entrega `chore/backend-orchestration` con aprobación técnica de
-QA. El usuario autorizó el push de esta entrega; no implica un merge a `main`. Ver la [guía de migraciones](./backend/docs/MIGRATION_GUIDE.md)
-y el [reporte de validación](./backend/docs/qa/be-01-review-e826df7.md).
-No ejecutar migraciones a ciegas sobre una base que ya contiene datos.
-La suite general `npm test` de la
-[issue #10](https://github.com/Talently-Lab/S2616-UrbanFix/issues/10) también está
-integrada localmente con aprobación técnica de QA: ejecuta 78 casos HTTP, de configuración, concurrencia y disponibilidad sobre
-PostgreSQL aislado, con generación de Prisma, migraciones y seed de laboratorio.
-Requiere Docker disponible o `TEST_DATABASE_URL` hacia un servidor exclusivo de
-pruebas; no utiliza la conexión de desarrollo como fallback. Ver el
-[reporte de QA](./backend/docs/qa/be-02-review-0829fc0.md).
+### Estado de la entrega
 
-La [issue #12](https://github.com/Talently-Lab/S2616-UrbanFix/issues/12) está
-integrada localmente con [aprobación de QA](./backend/docs/qa/be-04-review-4a1afab.md):
-las acciones concurrentes sobre solicitudes se serializan bajo bloqueo de fila,
-con permisos y estado revalidados en la transacción. La entrega aún no está publicada.
+Las seis issues del alcance de backend están implementadas y aprobadas por QA.
+La última suite funcional validada tiene **78 pruebas pasando**. La consolidación
+del contrato documenta **23 operaciones** (21 canónicas y 2 alias).
 
-La [issue #14](https://github.com/Talently-Lab/S2616-UrbanFix/issues/14) está
-integrada localmente con [aprobación de QA](./backend/docs/qa/be-06-review-84d5db6.md):
-Docker usa Node 24 y usuario no root; inicia solo la API. Las migraciones y el seed
-son operaciones explícitas. Ver la [guía operativa](./backend/docs/DEPLOYMENT.md)
-y [Compose local](./backend/compose.yaml). Esta entrega aún no está publicada.
+| Issue | Entrega | Evidencia QA | Publicación |
+|-------|---------|--------------|-------------|
+| #9 | Migraciones y actualización conservadora | [QA BE-01](./backend/docs/qa/be-01-review-e826df7.md) | Publicada en la rama de entrega hasta `e40b9ba` |
+| #10 | Runner y suite de integración HTTP | [QA BE-02](./backend/docs/qa/be-02-review-0829fc0.md) | Publicada en la rama de entrega hasta `e40b9ba` |
+| #11 | Entorno validado, JWT y CORS | [QA BE-03](./backend/docs/qa/be-03-review-4b1cc2d.md) | Integrada localmente; pendiente de autorización de push |
+| #12 | Concurrencia de solicitudes e historial | [QA BE-04](./backend/docs/qa/be-04-review-4a1afab.md) | Integrada localmente; pendiente de autorización de push |
+| #13 | Contrato completo, README y guías | [QA BE-05](./backend/docs/qa/be-05-review-f89add6.md) | Integrada localmente; pendiente de autorización de push |
+| #14 | Docker no-root, seed explícito y readiness | [QA BE-06](./backend/docs/qa/be-06-review-84d5db6.md) | Integrada localmente; pendiente de autorización de push |
+| #15 | Publicación pública | Excluida por instrucción del usuario | No se ejecutará |
+
+La rama de entrega es `chore/backend-orchestration`; no hubo merge a `main`.
+Antes de migrar una base con datos, consultar la
+[guía de migraciones](./backend/docs/MIGRATION_GUIDE.md). Para Docker y Compose,
+ver la [guía operativa](./backend/docs/DEPLOYMENT.md). El arranque de la imagen
+inicia solo la API; las migraciones y el seed son operaciones explícitas.
 
 ### Variables de entorno
 
 | Variable | Uso actual |
 |----------|------------|
-| `DATABASE_URL` | Conexión PostgreSQL desde el host utilizada por Prisma y el adaptador `pg` |
+| `DATABASE_URL` | Conexión PostgreSQL del proceso Node y de Prisma |
 | `DOCKER_DATABASE_URL` | Conexión interna de Compose hacia `db:5432`, con credenciales percent-encoded |
 | `PORT` | Puerto HTTP; predeterminado `3001` |
 | `JWT_SECRET` | Clave obligatoria de firma/verificación JWT, mínimo 32 caracteres; rechaza el placeholder del ejemplo |
 | `JWT_EXPIRES_IN` | Duración con entero positivo y unidad `s`, `m`, `h`, `d`; predeterminado `7d` |
 | `NODE_ENV` | `development`, `test` o `production`; predeterminado `development` |
 | `CORS_ORIGINS` | Lista de orígenes HTTP(S) separados por comas; obligatoria y sin wildcard en producción |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT` | Configuración del servicio PostgreSQL local de Compose |
+| `TEST_DATABASE_URL` | Conexión exclusiva de laboratorio para pruebas de migraciones; opcional para la suite HTTP con Docker |
 
 La [issue #11](https://github.com/Talently-Lab/S2616-UrbanFix/issues/11) está
 integrada localmente con [aprobación técnica de QA](./backend/docs/qa/be-03-review-4b1cc2d.md);
