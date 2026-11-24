@@ -186,6 +186,106 @@ El frontend se adaptó al contrato del backend (`backend/docs/API_CONTRACT.md`) 
 
 ## Backend
 
-> ⚠️ Sección pendiente: el integrante de BACKEND deberá completar aquí la documentación del backend (tecnología, instalación, variables de entorno y cómo levantar la API).
+API REST para registro y login, perfiles, solicitudes de servicio y administración
+de usuarios. Autentica con JWT y aplica permisos para `CLIENTE`, `TECNICO` y
+`ADMIN`; las solicitudes registran su historial de estados y rechazos individuales.
+
+### Stack
+
+| Componente | Tecnología |
+|------------|------------|
+| Runtime | Node.js, módulos ES; entorno de auditoría: Node 24 |
+| HTTP | Express 5 |
+| Persistencia | PostgreSQL, Prisma 7 y adaptador `@prisma/adapter-pg` |
+| Autenticación | JWT (`jsonwebtoken`) y hash de contraseñas con `bcryptjs` |
+| Validación | Zod 4 |
+| Desarrollo | npm, nodemon y PostgreSQL en Docker |
+
+### Instalación y ejecución
+
+La [guía del backend](./backend/README.md) detalla la preparación de PostgreSQL,
+instalación con `npm ci`, configuración a partir de
+[`backend/.env.example`](./backend/.env.example), generación de Prisma,
+migraciones, seed explícito y arranque con `npm run dev` desde `backend/`.
+
+- API local: `http://localhost:3001/api`.
+- Liveness local: `http://localhost:3001/health`, comprueba que responde el proceso.
+- Readiness local: `http://localhost:3001/ready`, comprueba PostgreSQL y la existencia
+  de las tablas requeridas; devuelve `503` si no están disponibles. No sustituye
+  la validación completa de migraciones.
+- Contrato de rutas, cuerpos y permisos: [API_CONTRACT.md](./backend/docs/API_CONTRACT.md).
+- Plan de correcciones y dependencias: [BACKEND_PLAN.md](./backend/docs/BACKEND_PLAN.md).
+
+### Estado de la entrega
+
+Las seis issues del alcance de backend están implementadas y aprobadas por QA.
+La última suite funcional validada tiene **78 pruebas pasando**. La consolidación
+del contrato documenta **23 operaciones** (21 canónicas y 2 alias).
+
+| Issue | Entrega | Evidencia QA | Publicación |
+|-------|---------|--------------|-------------|
+| #9 | Migraciones y actualización conservadora | [QA BE-01](./backend/docs/qa/be-01-review-e826df7.md) | Publicada en la rama de entrega hasta `e40b9ba` |
+| #10 | Runner y suite de integración HTTP | [QA BE-02](./backend/docs/qa/be-02-review-0829fc0.md) | Publicada en la rama de entrega hasta `e40b9ba` |
+| #11 | Entorno validado, JWT y CORS | [QA BE-03](./backend/docs/qa/be-03-review-4b1cc2d.md) | Integrada localmente; pendiente de autorización de push |
+| #12 | Concurrencia de solicitudes e historial | [QA BE-04](./backend/docs/qa/be-04-review-4a1afab.md) | Integrada localmente; pendiente de autorización de push |
+| #13 | Contrato completo, README y guías | [QA BE-05](./backend/docs/qa/be-05-review-f89add6.md) | Integrada localmente; pendiente de autorización de push |
+| #14 | Docker no-root, seed explícito y readiness | [QA BE-06](./backend/docs/qa/be-06-review-84d5db6.md) | Integrada localmente; pendiente de autorización de push |
+| #15 | Publicación pública | Excluida por instrucción del usuario | No se ejecutará |
+
+La rama de entrega es `chore/backend-orchestration`; no hubo merge a `main`.
+Antes de migrar una base con datos, consultar la
+[guía de migraciones](./backend/docs/MIGRATION_GUIDE.md). Para Docker y Compose,
+ver la [guía operativa](./backend/docs/DEPLOYMENT.md). El arranque de la imagen
+inicia solo la API; las migraciones y el seed son operaciones explícitas.
+
+### Variables de entorno
+
+| Variable | Uso actual |
+|----------|------------|
+| `DATABASE_URL` | Conexión PostgreSQL del proceso Node y de Prisma |
+| `DOCKER_DATABASE_URL` | Conexión interna de Compose hacia `db:5432`, con credenciales percent-encoded |
+| `PORT` | Puerto HTTP; predeterminado `3001` |
+| `JWT_SECRET` | Clave obligatoria de firma/verificación JWT, mínimo 32 caracteres; rechaza el placeholder del ejemplo |
+| `JWT_EXPIRES_IN` | Duración con entero positivo y unidad `s`, `m`, `h`, `d`; predeterminado `7d` |
+| `NODE_ENV` | `development`, `test` o `production`; predeterminado `development` |
+| `CORS_ORIGINS` | Lista de orígenes HTTP(S) separados por comas; obligatoria y sin wildcard en producción |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT` | Configuración del servicio PostgreSQL local de Compose |
+| `TEST_DATABASE_URL` | Conexión exclusiva de laboratorio para pruebas de migraciones; opcional para la suite HTTP con Docker |
+
+La [issue #11](https://github.com/Talently-Lab/S2616-UrbanFix/issues/11) está
+integrada localmente con [aprobación técnica de QA](./backend/docs/qa/be-03-review-4b1cc2d.md);
+esta entrega aún no tiene autorización de push. La API valida la configuración
+antes de escuchar. En desarrollo, CORS admite por defecto `localhost:5173` y
+`127.0.0.1:5173`; en producción requiere una lista explícita. Las solicitudes sin
+`Origin` siguen sujetas a autenticación y permisos. Prisma CLI y el seed no
+requieren configuración JWT ni orígenes de producción.
+El ejemplo de entorno no debe incluir credenciales reales ni prometer variables
+que todavía no consume la aplicación.
+
+### Cuentas de demostración
+
+Disponibles después de ejecutar explícitamente `npm run db:seed` sobre una base
+de desarrollo o laboratorio:
+
+| Rol | Correo | Contraseña de demostración |
+|-----|--------|----------------------------|
+| Cliente | `juan@mail.com` | `MinimoOchoCaracteres` |
+| Técnico | `carlos@mail.com` | `MinimoOchoCaracteres` |
+| Administrador | `admin@mail.com` | `MinimoOchoCaracteres` |
+
+Estas cuentas son datos de prueba; no ejecutar el seed en una base productiva.
+El registro público crea clientes o técnicos; no crea administradores.
+
+### Demo e integración
+
+**No hay una URL de demo pública verificada.** La
+[issue #15](https://github.com/Talently-Lab/S2616-UrbanFix/issues/15) está excluida
+de este ciclo por instrucción del usuario; este trabajo no publica la API.
+
+El backend devuelve el estado actual y los datos del técnico mediante consultas
+autenticadas de solicitudes. La actualización automática de una pantalla depende
+del consumo de esas consultas por el frontend; no hay un canal push implementado.
+Este ciclo de trabajo se limita al backend. **Todo push a GitHub requiere la
+aprobación explícita del usuario**, después de presentar los commits y la evidencia.
 
 </details>

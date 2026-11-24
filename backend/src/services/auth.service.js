@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import prisma from '../config/prisma.js';
+import { getJwtConfig } from '../config/env.js';
 
 export const register = async (data) => {
   const existingUser = await prisma.usuario.findUnique({
@@ -26,10 +27,11 @@ export const register = async (data) => {
     select: { id: true, email: true, nombre: true, celular: true, rol: true, fechaCreacion: true }
   });
 
+  const jwtConfig = getJwtConfig();
   const token = jwt.sign(
     { id: nuevoUsuario.id, rol: nuevoUsuario.rol },
-    process.env.JWT_SECRET || 'secret',
-    { expiresIn: '7d' }
+    jwtConfig.secret,
+    { expiresIn: jwtConfig.expiresInSeconds }
   );
 
   return { usuario: nuevoUsuario, token };
@@ -56,10 +58,12 @@ export const login = async (email, password) => {
     where: { id: user.id },
     data: { lastLogin: new Date() }
   });
+
+  const jwtConfig = getJwtConfig();
   const token = jwt.sign(
     { id: usuario.id, rol: usuario.rol },
-    process.env.JWT_SECRET || 'secret',
-    { expiresIn: '7d' }
+    jwtConfig.secret,
+    { expiresIn: jwtConfig.expiresInSeconds }
   );
 
   return { usuario, token };

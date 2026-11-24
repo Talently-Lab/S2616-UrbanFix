@@ -44,17 +44,21 @@ export const rechazar = async (req, res, next) => {
 
 export const iniciar = async (req, res, next) => {
   try {
-    const prev = await solicitudService.getSolicitudById(req.params.id, req.user);
-    if (prev.tecnicoId !== req.user.id) {
-      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No eres el técnico asignado' } });
-    }
     const solicitud = await solicitudService.cambiarEstado({
       id: req.params.id,
       user: req.user,
       estadoEsperado: 'ACEPTADA',
       nuevoEstado: 'EN_PROCESO',
       accion: 'iniciar',
-      datosActualizar: { fechaInicio: new Date() }
+      datosActualizar: { fechaInicio: new Date() },
+      checkAuth: (solicitud, user) => {
+        if (user.rol !== 'TECNICO' || solicitud.tecnicoId !== user.id) {
+          const error = new Error('No eres el técnico asignado');
+          error.status = 403;
+          error.code = 'FORBIDDEN';
+          throw error;
+        }
+      }
     });
     res.status(200).json({ data: solicitud });
   } catch (err) { next(err); }
@@ -62,17 +66,21 @@ export const iniciar = async (req, res, next) => {
 
 export const finalizar = async (req, res, next) => {
   try {
-    const prev = await solicitudService.getSolicitudById(req.params.id, req.user);
-    if (prev.tecnicoId !== req.user.id) {
-      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'No eres el técnico asignado' } });
-    }
     const solicitud = await solicitudService.cambiarEstado({
       id: req.params.id,
       user: req.user,
       estadoEsperado: 'EN_PROCESO',
       nuevoEstado: 'FINALIZADA',
       accion: 'finalizar',
-      datosActualizar: { fechaFinalizacion: new Date() }
+      datosActualizar: { fechaFinalizacion: new Date() },
+      checkAuth: (solicitud, user) => {
+        if (user.rol !== 'TECNICO' || solicitud.tecnicoId !== user.id) {
+          const error = new Error('No eres el técnico asignado');
+          error.status = 403;
+          error.code = 'FORBIDDEN';
+          throw error;
+        }
+      }
     });
     res.status(200).json({ data: solicitud });
   } catch (err) { next(err); }
@@ -80,10 +88,6 @@ export const finalizar = async (req, res, next) => {
 
 export const cancelar = async (req, res, next) => {
   try {
-    const prev = await solicitudService.getSolicitudById(req.params.id, req.user);
-    if (req.user.rol !== 'ADMIN' && prev.clienteId !== req.user.id) {
-      return res.status(403).json({ error: { code: 'FORBIDDEN', message: 'Solo el cliente o un administrador pueden cancelar' } });
-    }
     const solicitud = await solicitudService.cambiarEstado({
       id: req.params.id,
       user: req.user,
@@ -91,7 +95,15 @@ export const cancelar = async (req, res, next) => {
       nuevoEstado: 'CANCELADA',
       accion: 'cancelar',
       datosActualizar: { fechaCancelacion: new Date(), motivoCancelacion: req.body.motivo },
-      motivo: req.body.motivo
+      motivo: req.body.motivo,
+      checkAuth: (solicitud, user) => {
+        if (user.rol !== 'ADMIN' && solicitud.clienteId !== user.id) {
+          const error = new Error('Solo el cliente o un administrador pueden cancelar');
+          error.status = 403;
+          error.code = 'FORBIDDEN';
+          throw error;
+        }
+      }
     });
     res.status(200).json({ data: solicitud });
   } catch (err) { next(err); }

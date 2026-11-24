@@ -143,44 +143,62 @@ export const getSolicitudById = async (id, user) => {
 };
 
 export const updateSolicitud = async (id, clienteId, data) => {
-  const solicitud = await prisma.solicitudServicio.findUnique({ where: { id } });
-  if (!solicitud) {
-    const error = new Error('La solicitud no existe');
-    error.status = 404;
-    error.code = 'NOT_FOUND';
-    throw error;
-  }
-
-  if (solicitud.clienteId !== clienteId) {
-    const error = new Error('No eres el dueño de esta solicitud');
-    error.status = 403;
-    error.code = 'FORBIDDEN';
-    throw error;
-  }
-
-  if (solicitud.estado !== 'PENDIENTE') {
-    const error = new Error('Solo se pueden editar solicitudes en estado PENDIENTE');
-    error.status = 409;
-    error.code = 'CONFLICT';
-    throw error;
-  }
-
-  return await prisma.solicitudServicio.update({
-    where: { id },
-    data,
-    select: selectSolicitud
-  });
-};
-
-export const aceptarSolicitud = async (id, user) => {
   return await prisma.$transaction(async (tx) => {
-    const solicitud = await tx.solicitudServicio.findUnique({ where: { id } });
-    if (!solicitud) {
+    const rows = await tx.$queryRaw`
+      SELECT id, estado, "clienteId"
+      FROM "SolicitudServicio"
+      WHERE id = ${id}
+      FOR UPDATE
+    `;
+
+    if (rows.length === 0) {
       const error = new Error('La solicitud no existe');
       error.status = 404;
       error.code = 'NOT_FOUND';
       throw error;
     }
+
+    const solicitud = rows[0];
+
+    if (solicitud.clienteId !== clienteId) {
+      const error = new Error('No eres el dueño de esta solicitud');
+      error.status = 403;
+      error.code = 'FORBIDDEN';
+      throw error;
+    }
+
+    if (solicitud.estado !== 'PENDIENTE') {
+      const error = new Error('Solo se pueden editar solicitudes en estado PENDIENTE');
+      error.status = 409;
+      error.code = 'CONFLICT';
+      throw error;
+    }
+
+    return await tx.solicitudServicio.update({
+      where: { id },
+      data,
+      select: selectSolicitud
+    });
+  });
+};
+
+export const aceptarSolicitud = async (id, user) => {
+  return await prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw`
+      SELECT id, estado, "clienteId", "tecnicoId"
+      FROM "SolicitudServicio"
+      WHERE id = ${id}
+      FOR UPDATE
+    `;
+
+    if (rows.length === 0) {
+      const error = new Error('La solicitud no existe');
+      error.status = 404;
+      error.code = 'NOT_FOUND';
+      throw error;
+    }
+
+    const solicitud = rows[0];
 
     if (solicitud.estado !== 'PENDIENTE' || solicitud.tecnicoId !== null) {
       const error = new Error('La solicitud ya fue tomada o no se encuentra en estado PENDIENTE');
@@ -205,8 +223,7 @@ export const aceptarSolicitud = async (id, user) => {
       throw error;
     }
 
-    // Actualización atómica con control de concurrencia (KAN-216):
-    // garantiza que si dos técnicos aceptan al mismo tiempo, solo el primero actualice la fila.
+    // Actualización atómica con control de concurrencia y guarda de fila (KAN-216 / BE-04)
     const resultado = await tx.solicitudServicio.updateMany({
       where: {
         id,
@@ -246,16 +263,31 @@ export const aceptarSolicitud = async (id, user) => {
 
 export const rechazarSolicitud = async (id, user, motivo) => {
   return await prisma.$transaction(async (tx) => {
-    const solicitud = await tx.solicitudServicio.findUnique({ where: { id } });
-    if (!solicitud) {
+    const rows = await tx.$queryRaw`
+      SELECT id, estado, "clienteId", "tecnicoId"
+      FROM "SolicitudServicio"
+      WHERE id = ${id}
+      FOR UPDATE
+    `;
+
+    if (rows.length === 0) {
       const error = new Error('La solicitud no existe');
       error.status = 404;
       error.code = 'NOT_FOUND';
       throw error;
     }
 
+    const solicitud = rows[0];
+
     if (solicitud.estado !== 'PENDIENTE') {
       const error = new Error(`No se puede rechazar una solicitud en estado ${solicitud.estado}`);
+      error.status = 409;
+      error.code = 'CONFLICT';
+      throw error;
+    }
+
+    if (solicitud.tecnicoId === user.id) {
+      const error = new Error('No puedes rechazar una solicitud que ya has aceptado');
       error.status = 409;
       error.code = 'CONFLICT';
       throw error;
@@ -277,13 +309,23 @@ export const rechazarSolicitud = async (id, user, motivo) => {
       throw error;
     }
 
-    await tx.rechazoSolicitud.create({
-      data: {
-        solicitudId: id,
-        tecnicoId: user.id,
-        motivo
+    try {
+      await tx.rechazoSolicitud.create({
+        data: {
+          solicitudId: id,
+          tecnicoId: user.id,
+          motivo
+        }
+      });
+    } catch (err) {
+      if (err.code === 'P2002') {
+        const error = new Error('Ya has rechazado esta solicitud previamente');
+        error.status = 409;
+        error.code = 'CONFLICT';
+        throw error;
       }
-    });
+      throw err;
+    }
 
     await tx.historialEstadoSolicitud.create({
       data: {
@@ -303,14 +345,35 @@ export const rechazarSolicitud = async (id, user, motivo) => {
   });
 };
 
-export const cambiarEstado = async ({ id, user, estadoEsperado, nuevoEstado, datosActualizar = {}, motivo = null, accion = 'cambiar el estado' }) => {
+export const cambiarEstado = async ({
+  id,
+  user,
+  estadoEsperado,
+  nuevoEstado,
+  datosActualizar = {},
+  motivo = null,
+  accion = 'cambiar el estado',
+  checkAuth = null
+}) => {
   return await prisma.$transaction(async (tx) => {
-    const solicitud = await tx.solicitudServicio.findUnique({ where: { id } });
-    if (!solicitud) {
+    const rows = await tx.$queryRaw`
+      SELECT id, estado, "clienteId", "tecnicoId"
+      FROM "SolicitudServicio"
+      WHERE id = ${id}
+      FOR UPDATE
+    `;
+
+    if (rows.length === 0) {
       const error = new Error('La solicitud no existe');
       error.status = 404;
       error.code = 'NOT_FOUND';
       throw error;
+    }
+
+    const solicitud = rows[0];
+
+    if (checkAuth) {
+      checkAuth(solicitud, user);
     }
 
     const estadosValidos = Array.isArray(estadoEsperado) ? estadoEsperado : [estadoEsperado];
