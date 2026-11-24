@@ -15,7 +15,9 @@
     "seed": "prisma db seed",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "prisma db seed",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "test:migrations": "node tests/migrations/verify-migrations.js",
+    "db:precheck": "node tests/migrations/migration-precheck.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",

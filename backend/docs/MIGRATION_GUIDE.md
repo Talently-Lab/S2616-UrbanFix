@@ -231,4 +231,9 @@ TEST_DATABASE_URL="postgresql://postgres:testpass@localhost:55432/postgres" npm 
 - **Resolución de M1 (resuelto en BE-02):** Se unificó el ciclo de vida ante señales `SIGINT` y `SIGTERM`. Los procesos hijos se terminan de forma reactiva, se comprueba la cancelación antes de crear cualquier base nueva (impidiendo la creación de bases huérfanas durante el teardown) y se realiza una limpieza unificada e idempotente tanto de las bases creadas como del sentinel propio antes de salir con código 130 o 143.
 - `SIGKILL` y una caída del host no son interceptables a nivel de proceso. Para recuperar recursos en esos casos extremos, consultar los nombres exactos registrados en el log de la corrida y comprobar su propiedad antes de eliminarlos en el servidor de laboratorio. El prefijo `uf_` por sí solo no demuestra que una base pertenezca a esa corrida.
 
-La aprobación QA del candidato de migraciones está documentada en [be-01-review-e826df7.md](./qa/be-01-review-e826df7.md). Los únicos pushes autorizados por el usuario al repositorio remoto hasta la fecha alcanzaron las issues #9 y #10 hasta el commit `e40b9ba` en `chore/backend-orchestration`. Todo push adicional a GitHub requiere aprobación expresa del usuario.
+La aprobación independiente de QA de las migraciones está documentada en
+[be-01-review-e826df7.md](./qa/be-01-review-e826df7.md). Esta rama de PR conserva
+las mejoras posteriores del runner de migraciones para limpieza y señales, y se
+revalida contra `main` antes de publicar la entrega específica de la issue #9.
+La restauración de `npm test` y la suite HTTP pertenecen a la issue #10 y no se
+incluyen en este PR. Ejecutar `npm run test:migrations` para esta entrega.
