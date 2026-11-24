@@ -18,5 +18,5 @@ COPY src ./src
 
 EXPOSE 3001
 
-# Aplica las migraciones, siembra datos de prueba (idempotente) y arranca la API
-CMD ["sh", "-c", "npx prisma migrate deploy && node prisma/seed.js && node src/index.js"]
+# Aplica las migraciones y arranca la API
+CMD ["sh", "-c", "npx prisma migrate deploy && node src/index.js"]
